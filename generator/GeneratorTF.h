@@ -1,7 +1,8 @@
-#ifndef GENERATOR_H
-#define GENERATOR_H
+#ifndef GENERATORTF_H
+#define GENERATORTF_H
 #include <vector>
-#include <random>
+
+class CollisionDistribution;
 
 class GeneratorTF {
  public:
@@ -18,12 +19,6 @@ class GeneratorTF {
   const std::vector<float>& SimulateCollisionSequence();
 
  private:
-  float mFramesize;
-  float mRate;
-  float mOffset;
-  std::vector<float> mCollisionTimes;
-  int mSeed;
-  std::default_random_engine mGenerator;
-  std::exponential_distribution<float> mDistribution;
+  CollisionDistribution* mDistribution;
 };
 #endif
