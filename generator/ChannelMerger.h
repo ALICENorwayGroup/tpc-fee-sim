@@ -5,6 +5,7 @@
 #include <map>
 
 class AliAltroRawStreamV3;
+class AliRawReader;
 
 class ChannelMerger {
  public:
@@ -45,11 +46,17 @@ class ChannelMerger {
    */
   int AddChannel(float offset, unsigned int index, AliAltroRawStreamV3& stream);
 
+  int InitNextInput();
+
   unsigned mChannelLenght;
   unsigned mInitialBufferSize;
   unsigned mBufferSize;
   buffer_t* mBuffer;
   buffer_t* mUnderflowBuffer;
   std::map<unsigned int, unsigned int> mChannelPositions;
+  /// general interface to data
+  AliRawReader* mRawReader;
+  /// interface to TPC data
+  AliAltroRawStreamV3* mInputStream;
 };
 #endif
