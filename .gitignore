@@ -1,3 +1,9 @@
+# emacs backups
+*~
+
+# rootcint dictionary
+*.d
+
 # Compiled Object files
 *.slo
 *.lo
