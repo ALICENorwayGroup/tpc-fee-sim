@@ -1,6 +1,10 @@
 #include "ChannelMerger.h"
 #include "AliAltroRawStreamV3.h"
+#include "AliRawReader.h"
+#include "TString.h"
+#include "TGrid.h"
 #include <iostream>
+#include <iomanip>
 
 ChannelMerger::ChannelMerger()
   : mChannelLenght(1024)
@@ -9,6 +13,8 @@ ChannelMerger::ChannelMerger()
   , mBuffer(NULL) // TODO change to nullptr when moving to c++11
   , mUnderflowBuffer(NULL) // TODO change to nullptr when moving to c++11
   , mChannelPositions()
+  , mRawReader(NULL)
+  , mInputStream(NULL)
 {
 }
 
@@ -18,11 +24,80 @@ ChannelMerger::~ChannelMerger()
   mBuffer=NULL;
   if (mUnderflowBuffer) delete [] mUnderflowBuffer;
   mUnderflowBuffer=NULL;
+  if (mInputStream) delete mInputStream;
+  if (mRawReader) delete mRawReader;
 }
 
 int ChannelMerger::MergeCollisions(std::vector<float> collisiontimes)
 {
-  return collisiontimes.size();
+  int iMergedCollisions = 0;
+  std::cout << "merging " << collisiontimes.size() << " collisions in timeframe" << endl;
+  for (std::vector<float>::const_iterator collisionOffset = collisiontimes.begin();
+       collisionOffset != collisiontimes.end();
+       collisionOffset++) {
+    bool bHaveData=false;
+    do {
+      if (mRawReader == NULL || !mRawReader->NextEvent()) {
+	int result=InitNextInput();
+	if (result==0) return iMergedCollisions;
+	if (result<0) return result;
+      }
+      mInputStream->Reset();
+      mInputStream->SelectRawData("TPC");
+      while (mInputStream->NextDDL()) {
+	if (!bHaveData) {
+	  std::cout << "   adding collision at offset " << *collisionOffset << endl;
+	}
+	bHaveData=true;
+	unsigned DDLNumber=mInputStream->GetDDLNumber();
+	// cout << " reading event " << std::setw(4)// << eventCount
+	//      << "  DDL " << std::setw(4) << DDLNumber
+	//      << " (" << line << ")"
+	//      << endl;
+	while (mInputStream->NextChannel()) {
+	  if (mInputStream->IsChannelBad()) continue;
+	  unsigned HWAddress=mInputStream->GetHWAddress();
+	  unsigned index=DDLNumber<<16 | HWAddress;
+	  AddChannel(*collisionOffset, index, *mInputStream);
+	}
+      }
+    } while (!bHaveData);
+    iMergedCollisions++;
+  }
+  return iMergedCollisions;
+}
+
+int ChannelMerger::InitNextInput()
+{
+  // init the input stream for reading of the next event
+  if (mInputStream) {
+    // delete previous raw reader and stream
+    delete mInputStream;
+    delete mRawReader;
+    mInputStream=NULL;
+    mRawReader=NULL;
+  }
+  // open a new file
+  TString line;
+  line.ReadLine(cin);
+  while (cin.good()) {
+    static TGrid* pGrid=NULL;
+    if (pGrid==NULL && line.BeginsWith("alien://")) {
+      pGrid=TGrid::Connect("alien");
+      if (!pGrid) return -1;
+    }
+    cout << "open file " << " '" << line << "'" << endl;
+    mRawReader=AliRawReader::Create(line);
+    mInputStream=new AliAltroRawStreamV3(mRawReader);
+    if (!mRawReader || !mInputStream) {
+      return -1;
+    }
+    mRawReader->RewindEvents();
+    if (mRawReader->NextEvent()) return 1;
+    line.ReadLine(cin);
+  }
+  cout << "no more input files specified" << endl;
+  return 0;
 }
 
 int ChannelMerger::GrowBuffer(unsigned newsize)
