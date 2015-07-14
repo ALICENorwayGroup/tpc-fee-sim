@@ -3,8 +3,8 @@
 #include <iostream>
 
 ChannelMerger::ChannelMerger()
-  , mChannelLenght(1024)
-  : mInitialBufferSize(600000 * mChannelLenght * sizeof(buffer_t))
+  : mChannelLenght(1024)
+  , mInitialBufferSize(600000 * mChannelLenght * sizeof(buffer_t))
   , mBufferSize(0)
   , mBuffer(NULL) // TODO change to nullptr when moving to c++11
   , mUnderflowBuffer(NULL) // TODO change to nullptr when moving to c++11
