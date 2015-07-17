@@ -3,7 +3,6 @@
 #include "AliRawReader.h"
 #include "TString.h"
 #include "TGrid.h"
-#include <iostream>
 #include <iomanip>
 
 ChannelMerger::ChannelMerger()
@@ -28,7 +27,7 @@ ChannelMerger::~ChannelMerger()
   if (mRawReader) delete mRawReader;
 }
 
-int ChannelMerger::MergeCollisions(std::vector<float> collisiontimes)
+int ChannelMerger::MergeCollisions(std::vector<float> collisiontimes, std::istream& inputfiles)
 {
   int iMergedCollisions = 0;
   std::cout << "merging " << collisiontimes.size() << " collisions in timeframe" << endl;
@@ -38,7 +37,7 @@ int ChannelMerger::MergeCollisions(std::vector<float> collisiontimes)
     bool bHaveData=false;
     do {
       if (mRawReader == NULL || !mRawReader->NextEvent()) {
-	int result=InitNextInput();
+	int result=InitNextInput(inputfiles);
 	if (result==0) return iMergedCollisions;
 	if (result<0) return result;
       }
@@ -67,7 +66,7 @@ int ChannelMerger::MergeCollisions(std::vector<float> collisiontimes)
   return iMergedCollisions;
 }
 
-int ChannelMerger::InitNextInput()
+int ChannelMerger::InitNextInput(std::istream& inputfiles)
 {
   // init the input stream for reading of the next event
   if (mInputStream) {
@@ -79,8 +78,8 @@ int ChannelMerger::InitNextInput()
   }
   // open a new file
   TString line;
-  line.ReadLine(cin);
-  while (cin.good()) {
+  line.ReadLine(inputfiles);
+  while (inputfiles.good()) {
     static TGrid* pGrid=NULL;
     if (pGrid==NULL && line.BeginsWith("alien://")) {
       pGrid=TGrid::Connect("alien");
@@ -94,7 +93,7 @@ int ChannelMerger::InitNextInput()
     }
     mRawReader->RewindEvents();
     if (mRawReader->NextEvent()) return 1;
-    line.ReadLine(cin);
+    line.ReadLine(inputfiles);
   }
   cout << "no more input files specified" << endl;
   return 0;

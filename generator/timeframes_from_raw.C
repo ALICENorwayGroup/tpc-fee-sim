@@ -26,6 +26,7 @@
 #include "ChannelMerger.h"
 #include <vector>
 #include <iostream>
+#include <fstream>
 
 const float g_rate=5.;    // rate with respect to unit time, i.e. framesize
 const int   g_nframes=10;    // number of timeframes to be generated
@@ -36,10 +37,16 @@ void timeframes_from_raw()
   ChannelMerger merger;
   int nframes=0;
 
+  std::istream* inputfiles=&std::cin;
+  std::ifstream inputconfiguration("datafiles.txt");
+  if (inputconfiguration.good()) {
+    inputfiles=&inputconfiguration;
+  }
+
   while (nframes++<g_nframes || g_nframes<0) {
     const std::vector<float>& tf=generator.SimulateCollisionSequence();
 
-    int mergedCollisions=merger.MergeCollisions(tf);
+    int mergedCollisions=merger.MergeCollisions(tf, *inputfiles);
     if (mergedCollisions < 0) {
       std::cerr << "merging collisions failed with error code " << mergedCollisions << std::endl;
       break;

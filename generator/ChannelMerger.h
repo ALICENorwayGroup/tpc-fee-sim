@@ -1,6 +1,7 @@
 #ifndef CHANNELMERGER_H
 #define CHANNELMERGER_H
 
+#include <iostream>
 #include <vector>
 #include <map>
 
@@ -12,7 +13,7 @@ class ChannelMerger {
   ChannelMerger();
   ~ChannelMerger();
 
-  int MergeCollisions(std::vector<float> collisiontimes);
+  int MergeCollisions(std::vector<float> collisiontimes, std::istream& inputfiles);
 
   /**
    * Start a new timeframe.
@@ -46,7 +47,7 @@ class ChannelMerger {
    */
   int AddChannel(float offset, unsigned int index, AliAltroRawStreamV3& stream);
 
-  int InitNextInput();
+  int InitNextInput(std::istream& inputfiles);
 
   unsigned mChannelLenght;
   unsigned mInitialBufferSize;
