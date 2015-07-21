@@ -1,32 +1,20 @@
-set(LIBRARY_NAME CRUsim)
+set(LIBRARY_NAME Generator)
 
-if (${SYSTEMC_FOUND})
 include_directories(
-  ${SYSTEMC_INCDIR}
 )
 
 link_directories(
-  ${SYSTEMC_LIBDIR}
 )
 
 set(SOURCES
-  GBT.cpp
-  CRU.cpp
-  SAMPA.cpp
-  DataGenerator.cpp
-  Packet.cpp
-  Sample.cpp
-  RandomGenerator.cpp
-  CRUMonitor.cpp
-  SAMPAMonitor.cpp
-  Signal.cpp
+  CollisionDistribution.cxx
+  GeneratorTF.cxx
 )
 
 string (REGEX REPLACE "\\.cxx" ".obj" OBJECTS "${SOURCES}")
 
 set(DEPENDENCIES
   ${DEPENDENCIES}
-  ${SYSTEMC_LIBRARIES}
 )
 
 #set(DEPENDENCIES
@@ -45,14 +33,13 @@ target_link_libraries( ${LIBRARY_NAME}
 )
 
 Set(Exe_Names
-  runCRU
 )
 
 set(Exe_Source
-  main.cpp
 )
 
 list(LENGTH Exe_Names _length)
+if(${_length} GREATER 0)
 math(EXPR _length ${_length}-1)
 
 ForEach(_file RANGE 0 ${_length})
@@ -65,6 +52,4 @@ ForEach(_file RANGE 0 ${_length})
   target_link_libraries(${EXE_NAME} ${DEPENDENCIES})
   install(TARGETS ${EXE_NAME} DESTINATION bin)
 EndForEach(_file RANGE 0 ${_length})
-else()
-message(WARNING "SystemC required to build module '${LIBRARY_NAME}', skipping ...")
-endif (${SYSTEMC_FOUND})
+endif(${_length} GREATER 0)

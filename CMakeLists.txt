@@ -50,3 +50,4 @@ set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}" ${CMAKE_MODULE_PATH})
 FIND_PACKAGE(SystemC)
 
 add_subdirectory (CRU)
+add_subdirectory (generator)
