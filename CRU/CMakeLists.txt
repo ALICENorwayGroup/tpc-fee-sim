@@ -1,17 +1,13 @@
-set(SYSTEMC_ARCH linux64)
-set(SYSTEMC /opt/systemc/systemc-2.3.1)
+set(LIBRARY_NAME CRUsim)
 
-set(INCLUDE_DIRECTORIES
-  ${SYSTEMC}/include 
+if (${SYSTEMC_FOUND})
+include_directories(
+  ${SYSTEMC_INCDIR}
 )
 
-include_directories(${INCLUDE_DIRECTORIES})
-
-set(LINK_DIRECTORIES
-  ${SYSTEMC}/lib-${SYSTEMC_ARCH}
+link_directories(
+  ${SYSTEMC_LIBDIR}
 )
-
-link_directories(${LINK_DIRECTORIES})
 
 set(SOURCES
   GBT.cpp
@@ -30,15 +26,13 @@ string (REGEX REPLACE "\\.cxx" ".obj" OBJECTS "${SOURCES}")
 
 set(DEPENDENCIES
   ${DEPENDENCIES}
-  systemc
+  ${SYSTEMC_LIBRARIES}
 )
 
 #set(DEPENDENCIES
 #  ${DEPENDENCIES}
 #   boost_thread boost_system boost_chrono FairMQ
 #)
-
-set(LIBRARY_NAME CRUsim)
 
 add_library(
   ${LIBRARY_NAME}
@@ -71,3 +65,6 @@ ForEach(_file RANGE 0 ${_length})
   target_link_libraries(${EXE_NAME} ${DEPENDENCIES})
   install(TARGETS ${EXE_NAME} DESTINATION bin)
 EndForEach(_file RANGE 0 ${_length})
+else()
+message(WARNING "SystemC required to build module '${LIBRARY_NAME}', skipping ...")
+endif (${SYSTEMC_FOUND})

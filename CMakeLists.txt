@@ -39,8 +39,6 @@ set(CMAKE_CXX_FLAGS                "-Wall -std=c++11")
 #  Message(FATAL_ERROR "C++11 support required, not found ... aborting.")
 #EndIF(NOT CMAKE_CXX_FLAGS)
 
-add_subdirectory (CRU)
-
 # supported from cmake 3.1.0, activate later
 #target_compile_features(foobar PRIVATE cxx_range_for)
 
@@ -50,3 +48,5 @@ Message(STATUS "CMAKE_SOURCE_DIR:   ${CMAKE_SOURCE_DIR}")
 
 set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}" ${CMAKE_MODULE_PATH})
 FIND_PACKAGE(SystemC)
+
+add_subdirectory (CRU)
