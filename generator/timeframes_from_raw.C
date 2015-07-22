@@ -36,6 +36,7 @@ void timeframes_from_raw()
   GeneratorTF generator(g_rate);
   ChannelMerger merger;
   int nframes=0;
+  bool bHaveSignalOverflow=false;
 
   std::istream* inputfiles=&std::cin;
   std::ifstream inputconfiguration("datafiles.txt");
@@ -43,10 +44,18 @@ void timeframes_from_raw()
     inputfiles=&inputconfiguration;
   }
 
+  std::vector<float> singleTF;
+  singleTF.push_back(0.);
+
   while (nframes++<g_nframes || g_nframes<0) {
     const std::vector<float>& tf=generator.SimulateCollisionSequence();
+    //const std::vector<float>& tf=singleTF;
 
     int mergedCollisions=merger.MergeCollisions(tf, *inputfiles);
+    if (merger.GetSignalOverflowCount() > 0) {
+      std::cout << "signal overflow in current timeframe detected" << std::endl;
+      bHaveSignalOverflow=true;
+    }
     if (mergedCollisions < 0) {
       std::cerr << "merging collisions failed with error code " << mergedCollisions << std::endl;
       break;
@@ -58,6 +67,9 @@ void timeframes_from_raw()
 
     std::cout << "Successfully generated timeframe from " << tf.size() << " collisions" << std::endl;
     for (std::vector<float>::const_iterator element=tf.begin(); element!=tf.end(); element++) std::cout << "   collision at offset " << *element << std::endl;
+  }
+  if (bHaveSignalOverflow) {
+    std::cout << "WARNING: signal overflow detected in at least one timeframe" << std::endl;
   }
 }
 

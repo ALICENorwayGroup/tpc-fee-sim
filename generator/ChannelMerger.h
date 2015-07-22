@@ -24,6 +24,10 @@ class ChannelMerger {
    */
   int StartTimeframe();
 
+  /**
+   * Check overflow counter for the current TF
+   */
+  unsigned int GetSignalOverflowCount() const {return mSignalOverflowCount;}
  protected:
 
  private:
@@ -55,6 +59,7 @@ class ChannelMerger {
   buffer_t* mBuffer;
   buffer_t* mUnderflowBuffer;
   std::map<unsigned int, unsigned int> mChannelPositions;
+  unsigned int mSignalOverflowCount;
   /// general interface to data
   AliRawReader* mRawReader;
   /// interface to TPC data

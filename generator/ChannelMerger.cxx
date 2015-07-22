@@ -4,6 +4,10 @@
 #include "TString.h"
 #include "TGrid.h"
 #include <iomanip>
+#include <assert.h>
+
+const ChannelMerger::buffer_t VOID_SIGNAL=~(ChannelMerger::buffer_t)(0);
+const ChannelMerger::buffer_t MAX_ACCUMULATED_SIGNAL=VOID_SIGNAL-1;
 
 ChannelMerger::ChannelMerger()
   : mChannelLenght(1024)
@@ -12,6 +16,7 @@ ChannelMerger::ChannelMerger()
   , mBuffer(NULL) // TODO change to nullptr when moving to c++11
   , mUnderflowBuffer(NULL) // TODO change to nullptr when moving to c++11
   , mChannelPositions()
+  , mSignalOverflowCount(0)
   , mRawReader(NULL)
   , mInputStream(NULL)
 {
@@ -109,7 +114,8 @@ int ChannelMerger::GrowBuffer(unsigned newsize)
     memcpy(mBuffer, lastData, mBufferSize * sizeof(buffer_t));
     delete [] lastData;
   }
-  memset(mBuffer+mBufferSize, 0, (newsize - mBufferSize) * sizeof(buffer_t));
+  // initialize to VOID_SIGNAL value to indicate timebins without signals
+  memset(mBuffer+mBufferSize, 0xff, (newsize - mBufferSize) * sizeof(buffer_t));
 
   lastData=mUnderflowBuffer;
   mUnderflowBuffer = new buffer_t[newsize];
@@ -117,7 +123,7 @@ int ChannelMerger::GrowBuffer(unsigned newsize)
     memcpy(mUnderflowBuffer, lastData, mBufferSize * sizeof(buffer_t));
     delete [] lastData;
   }
-  memset(mUnderflowBuffer+mBufferSize, 0, (newsize - mBufferSize) * sizeof(buffer_t));
+  memset(mUnderflowBuffer+mBufferSize, 0xff, (newsize - mBufferSize) * sizeof(buffer_t));
 
   mBufferSize=newsize;
 
@@ -131,7 +137,9 @@ int ChannelMerger::StartTimeframe()
   buffer_t* lastData=mBuffer;
   mBuffer=mUnderflowBuffer;
   mUnderflowBuffer=lastData;
-  if (mUnderflowBuffer) memset(mUnderflowBuffer, 0, mBufferSize * sizeof(buffer_t));
+  // initialize to VOID_SIGNAL value to indicate timebins without signals
+  if (mUnderflowBuffer) memset(mUnderflowBuffer, 0xff, mBufferSize * sizeof(buffer_t));
+  mSignalOverflowCount=0;
 
   return 0;
 }
@@ -143,9 +151,11 @@ int ChannelMerger::AddChannel(float offset, unsigned int index, AliAltroRawStrea
   if (mChannelPositions.find(index) == mChannelPositions.end()) {
     // add index to map
     mChannelPositions[index]=position;
+    //std::cout << "adding new channel with index " << std::hex << std::setw(8) << index << " at position " << std::dec << position << std::endl;
   } else {
     // get position from map
     position=mChannelPositions[index];
+    //std::cout << "using channel with index " << std::hex << std::setw(8) << index << " at position " << std::dec << position << std::endl;
   }
 
   unsigned reqsize=position + 1; // need space for one channel starting at position
@@ -162,18 +172,51 @@ int ChannelMerger::AddChannel(float offset, unsigned int index, AliAltroRawStrea
     GrowBuffer(newsize);
   }
 
+  position*=mChannelLenght;
+  assert(position+mChannelLenght<=mBufferSize);
   while (stream.NextBunch()) {
     int startTime=stream.GetStartTimeBin();
     startTime-=offset * mChannelLenght;
     int bunchLength=stream.GetBunchLength();
     const unsigned short* signals=stream.GetSignals();
     for (Int_t i=0; i<bunchLength; i++) {
+      assert(signals[i]<1024);
+      if (signals[i]>=1024) {
+	std::cout << "invalid signal value " << signals[i] << std::endl;
+      }
       int timebin=startTime-i;
       if (timebin < (int)mChannelLenght && timebin >= 0) {
+	if (mBuffer[position+timebin] == VOID_SIGNAL) {
+	  // first value in this timebin
+	  mBuffer[position+timebin]=signals[i];
+	} else if (mBuffer[position+timebin] > MAX_ACCUMULATED_SIGNAL-signals[i]) {
+	  // range overflow
+	  assert(0); // stop here or count errors if assert disabled (NDEBUG)
+	  if (mSignalOverflowCount<10) {
+	    std::cout << "overflow at timebin " << timebin
+		      << " MAX_ACCUMULATED_SIGNAL=" << MAX_ACCUMULATED_SIGNAL
+		      << " buffer=" << mBuffer[position+timebin]
+		      << " signal=" << signals[i]
+		      << std::endl;
+	  }
+	  mBuffer[position+timebin] = MAX_ACCUMULATED_SIGNAL;
+	  mSignalOverflowCount++;
+	} else {
 	mBuffer[position+timebin]+=signals[i];
+	}
       } else if (timebin < 0 && (timebin + (int)mChannelLenght) >= 0) {
 	timebin += mChannelLenght;
+	if (mUnderflowBuffer[position+timebin] == VOID_SIGNAL) {
+	  // first value in this timebin
+	  mUnderflowBuffer[position+timebin]=signals[i];
+	} else if (mUnderflowBuffer[position+timebin] > MAX_ACCUMULATED_SIGNAL-signals[i]) {
+	  // range overflow
+	  mUnderflowBuffer[position+timebin] = MAX_ACCUMULATED_SIGNAL;
+	  // overflow is only counted for buffer of current timeframe
+	  assert(0); // stop here
+	} else {
 	mUnderflowBuffer[position+timebin]+=signals[i];
+	}
       } else {
 	// TODO: some out-of-range counter
 	std::cerr << "sample with timebin " << timebin << " out of range" << std::endl;
