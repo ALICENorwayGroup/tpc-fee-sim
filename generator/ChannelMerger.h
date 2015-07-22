@@ -7,6 +7,7 @@
 
 class AliAltroRawStreamV3;
 class AliRawReader;
+class TTree;
 
 class ChannelMerger {
  public:
@@ -28,6 +29,16 @@ class ChannelMerger {
    * Check overflow counter for the current TF
    */
   unsigned int GetSignalOverflowCount() const {return mSignalOverflowCount;}
+
+  int Normalize(unsigned count);
+
+  int Analyze(TTree& target);
+
+  void SetDDLRange(int min, int max) {
+    mInputStreamMinDDL=min;
+    mInputStreamMaxDDL=max;
+  }
+
  protected:
 
  private:
@@ -64,5 +75,9 @@ class ChannelMerger {
   AliRawReader* mRawReader;
   /// interface to TPC data
   AliAltroRawStreamV3* mInputStream;
+  /// min DDL number
+  int mInputStreamMinDDL;
+  /// max DDL number
+  int mInputStreamMaxDDL;
 };
 #endif

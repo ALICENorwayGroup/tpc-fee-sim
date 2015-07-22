@@ -3,6 +3,7 @@
 #include "AliRawReader.h"
 #include "TString.h"
 #include "TGrid.h"
+#include "TTree.h"
 #include <iomanip>
 #include <assert.h>
 
@@ -19,6 +20,8 @@ ChannelMerger::ChannelMerger()
   , mSignalOverflowCount(0)
   , mRawReader(NULL)
   , mInputStream(NULL)
+  , mInputStreamMinDDL(-1)
+  , mInputStreamMaxDDL(-1)
 {
 }
 
@@ -35,7 +38,7 @@ ChannelMerger::~ChannelMerger()
 int ChannelMerger::MergeCollisions(std::vector<float> collisiontimes, std::istream& inputfiles)
 {
   int iMergedCollisions = 0;
-  std::cout << "merging " << collisiontimes.size() << " collisions in timeframe" << endl;
+  std::cout << "merging " << collisiontimes.size() << " collision(s) into timeframe" << endl;
   for (std::vector<float>::const_iterator collisionOffset = collisiontimes.begin();
        collisionOffset != collisiontimes.end();
        collisionOffset++) {
@@ -47,10 +50,14 @@ int ChannelMerger::MergeCollisions(std::vector<float> collisiontimes, std::istre
 	if (result<0) return result;
       }
       mInputStream->Reset();
+      if (mInputStreamMinDDL>=0 && mInputStreamMaxDDL>=0) {
+	mRawReader->Select("TPC", mInputStreamMinDDL, mInputStreamMaxDDL);
+      } else {
       mInputStream->SelectRawData("TPC");
+      }
       while (mInputStream->NextDDL()) {
 	if (!bHaveData) {
-	  std::cout << "   adding collision at offset " << *collisionOffset << endl;
+	  std::cout << "   adding collision " << iMergedCollisions << " at offset " << *collisionOffset << endl;
 	}
 	bHaveData=true;
 	unsigned DDLNumber=mInputStream->GetDDLNumber();
@@ -222,6 +229,143 @@ int ChannelMerger::AddChannel(float offset, unsigned int index, AliAltroRawStrea
 	std::cerr << "sample with timebin " << timebin << " out of range" << std::endl;
       }
     }
+  }
+
+  return 0;
+}
+
+int ChannelMerger::Normalize(unsigned count)
+{
+  if (count==0) return 0;
+
+  for (std::map<unsigned int, unsigned int>::const_iterator chit=mChannelPositions.begin();
+       chit!=mChannelPositions.end(); chit++) {
+    unsigned index=chit->first;
+    unsigned position=chit->second;
+    position*=mChannelLenght;
+    for (unsigned i=0; i<mChannelLenght; i++) {
+      unsigned signal=mBuffer[position+i];
+      if (signal == VOID_SIGNAL) continue;
+      mBuffer[position+i]=signal/count;
+    }
+  }
+}
+
+int ChannelMerger::Analyze(TTree& target)
+{
+  int DDLNumber=0;
+  int HWAddr=0;
+  int MinSignal=0;
+  int MaxSignal=0;
+  int AvrgSignal=0;
+  int MinSignalDiff=0;
+  int MaxSignalDiff=0;
+  int MinTimebin=0;
+  int MaxTimebin=0;
+  int NFilledTimebins=0;
+  int NBunches=0;
+  // strangely enough, TTree::SetBranchAddress requires the
+  // array to be 'unsigned int' although the branch was created with
+  // in array.
+  unsigned int BunchLength[mChannelLenght];
+
+  if (target.GetBranch("DDLNumber") != NULL) {
+    target.SetBranchAddress("DDLNumber", &DDLNumber);
+  }
+
+  if (target.GetBranch("HWAddr") != NULL) {
+    target.SetBranchAddress("HWAddr", &HWAddr);
+  }
+
+  if (target.GetBranch("MinSignal") != NULL) {
+    target.SetBranchAddress("MinSignal", &MinSignal);
+  }
+
+  if (target.GetBranch("MaxSignal") != NULL) {
+    target.SetBranchAddress("MaxSignal", &MaxSignal);
+  }
+
+  if (target.GetBranch("AvrgSignal") != NULL) {
+    target.SetBranchAddress("AvrgSignal", &AvrgSignal);
+  }
+
+  if (target.GetBranch("MinSignalDiff") != NULL) {
+    target.SetBranchAddress("MinSignalDiff", &MinSignalDiff);
+  }
+
+  if (target.GetBranch("MaxSignalDiff") != NULL) {
+    target.SetBranchAddress("MaxSignalDiff", &MaxSignalDiff);
+  }
+
+  if (target.GetBranch("MinTimebin") != NULL) {
+    target.SetBranchAddress("MinTimebin", &MinTimebin);
+  }
+
+  if (target.GetBranch("MaxTimebin") != NULL) {
+    target.SetBranchAddress("MaxTimebin", &MaxTimebin);
+  }
+
+  if (target.GetBranch("NFilledTimebins") != NULL) {
+    target.SetBranchAddress("NFilledTimebins", &NFilledTimebins);
+  }
+
+  if (target.GetBranch("NBunches") != NULL) {
+    target.SetBranchAddress("NBunches", &NBunches);
+  }
+
+  if (target.GetBranch("BunchLength") != NULL) {
+    target.SetBranchAddress("BunchLength", BunchLength);
+  }
+
+  for (std::map<unsigned int, unsigned int>::const_iterator chit=mChannelPositions.begin();
+       chit!=mChannelPositions.end(); chit++) {
+    unsigned index=chit->first;
+    unsigned position=chit->second;
+    position*=mChannelLenght;
+    DDLNumber=(index&0xffff0000)>>16;
+    HWAddr=index&0x0000ffff;
+    MinSignal=-1;
+    MaxSignal=-1;
+    MinSignalDiff=-1;
+    MaxSignalDiff=-1;
+    AvrgSignal=0;
+    MinTimebin=-1;
+    MaxTimebin=mChannelLenght;
+    NFilledTimebins=0;
+    NBunches=0;
+    int nBunchSamples=0;
+    for (unsigned i=0; i<mChannelLenght; i++) {
+      int signal=mBuffer[position+i];
+      if (signal == VOID_SIGNAL) {
+	if (nBunchSamples>0) {
+	  BunchLength[NBunches++]=nBunchSamples;
+	  nBunchSamples=0;
+	}
+	continue;
+      }
+      nBunchSamples++;
+      if (MinTimebin<0) MinTimebin=i;
+      MaxTimebin=i;
+      if (MinSignal<0 || MinSignal>signal) MinSignal=signal;
+      if (MaxSignal<0 || MaxSignal<signal) MaxSignal=signal;
+      AvrgSignal+=signal;
+      NFilledTimebins++;
+      if (i>0 && mBuffer[position+i-1] != VOID_SIGNAL) {
+	signal-=mBuffer[position+i-1] != VOID_SIGNAL;
+	if (MaxSignalDiff<0 || MaxSignalDiff<(signal>=0?signal:-signal))
+	  MaxSignalDiff=signal;
+	if (MinSignalDiff<0 || MinSignalDiff>(signal>=0?signal:-signal))
+	  MinSignalDiff=signal;
+      }
+    }
+    if (nBunchSamples>0) {
+      BunchLength[NBunches++]=nBunchSamples;
+      nBunchSamples=0;
+    }
+    if (NFilledTimebins>0) {
+      AvrgSignal/=NFilledTimebins;
+    }
+    target.Fill();
   }
 
   return 0;
