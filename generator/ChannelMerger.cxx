@@ -6,6 +6,7 @@
 #include "TTree.h"
 #include <iomanip>
 #include <assert.h>
+#include <fstream>
 
 const ChannelMerger::buffer_t VOID_SIGNAL=~(ChannelMerger::buffer_t)(0);
 const ChannelMerger::buffer_t MAX_ACCUMULATED_SIGNAL=VOID_SIGNAL-1;
@@ -17,6 +18,7 @@ ChannelMerger::ChannelMerger()
   , mBuffer(NULL) // TODO change to nullptr when moving to c++11
   , mUnderflowBuffer(NULL) // TODO change to nullptr when moving to c++11
   , mChannelPositions()
+  , mChannelThresholds()
   , mSignalOverflowCount(0)
   , mRawReader(NULL)
   , mInputStream(NULL)
@@ -165,6 +167,10 @@ int ChannelMerger::AddChannel(float offset, unsigned int index, AliAltroRawStrea
     //std::cout << "using channel with index " << std::hex << std::setw(8) << index << " at position " << std::dec << position << std::endl;
   }
 
+  unsigned int threshold=VOID_SIGNAL;
+  if (mChannelThresholds.find(index) != mChannelThresholds.end()) {
+    threshold = mChannelThresholds[index];
+  }
   unsigned reqsize=position + 1; // need space for one channel starting at position
   reqsize *= mChannelLenght * sizeof(buffer_t);
   if (reqsize > mBufferSize) {
@@ -186,11 +192,39 @@ int ChannelMerger::AddChannel(float offset, unsigned int index, AliAltroRawStrea
     startTime-=offset * mChannelLenght;
     int bunchLength=stream.GetBunchLength();
     const unsigned short* signals=stream.GetSignals();
+    bool bSignalPeak=false;
     for (Int_t i=0; i<bunchLength; i++) {
       assert(signals[i]<1024);
       if (signals[i]>=1024) {
 	std::cout << "invalid signal value " << signals[i] << std::endl;
       }
+
+      // ZS
+      if (threshold!=VOID_SIGNAL) {
+	if (!bSignalPeak && signals[i]>threshold &&
+	    i+1<bunchLength && signals[i+1]>threshold) {
+	  // signal peak starts at two consecutive signals over threshold
+	  bSignalPeak=true;
+	} else if (bSignalPeak && signals[i]>threshold) {
+	  // signal belonging to active signal peak
+	} else if (bSignalPeak && signals[i]<=threshold) {
+	  if (i+1<bunchLength && signals[i+1]>threshold ||
+	      i+2<bunchLength && signals[i+2]>threshold) {
+	    // signal below threshold after peak, merged if next or
+	    // next to next signal over threshold
+	    // two signal peaks intercepted by one or two consecutive
+	    // signals below threshold are merged
+	  } else {
+	    // signal below threshold after peak
+	    bSignalPeak=false;
+	    continue;
+	  }
+	} else {
+	  // suppress signal
+	  continue;
+	}
+      }
+
       int timebin=startTime-i;
       if (timebin < (int)mChannelLenght && timebin >= 0) {
 	if (mBuffer[position+timebin] == VOID_SIGNAL) {
@@ -251,8 +285,10 @@ int ChannelMerger::Normalize(unsigned count)
   }
 }
 
-int ChannelMerger::Analyze(TTree& target)
+int ChannelMerger::Analyze(TTree& target, const char* statfilename)
 {
+
+  // tree setup
   int DDLNumber=0;
   int HWAddr=0;
   int MinSignal=0;
@@ -317,6 +353,16 @@ int ChannelMerger::Analyze(TTree& target)
     target.SetBranchAddress("BunchLength", BunchLength);
   }
 
+  // statistics file setup
+  std::ofstream* statfile = NULL;
+  if (statfilename) {
+    statfile = new std::ofstream(statfilename);
+    if (statfile!=NULL && !statfile->good()) {
+      delete statfile;
+      statfile=NULL;
+    }
+  }
+
   for (std::map<unsigned int, unsigned int>::const_iterator chit=mChannelPositions.begin();
        chit!=mChannelPositions.end(); chit++) {
     unsigned index=chit->first;
@@ -366,7 +412,53 @@ int ChannelMerger::Analyze(TTree& target)
       AvrgSignal/=NFilledTimebins;
     }
     target.Fill();
+    if (statfile) {
+      (*statfile) << std::setw(3) << DDLNumber
+		  << std::setw(6) << HWAddr
+		  << std::setw(6) << AvrgSignal
+		  << std::setw(6) << MinSignal
+		  << std::setw(6) << MaxSignal
+		  << std::setw(6) << NFilledTimebins
+		  << std::setw(6) << NBunches
+		  << std::endl;
+    }
+  }
+
+  if (statfile) {
+    statfile->close();
+    delete statfile;
+    statfile = NULL;
   }
 
   return 0;
+}
+
+int ChannelMerger::InitChannelThresholds(const char* filename, int baselineshift)
+{
+  std::ifstream input(filename);
+  if (!input.good()) return -1;
+  std::cout << "reading channel thresholds from file " << filename << endl;
+
+  int DDLNumber=-1;
+  int HWAddr=-1;
+  int MinSignal=-1;
+  int MaxSignal=-1;
+  int AvrgSignal=-1;
+
+  const int bufferSize=1024;
+  char buffer[bufferSize];
+
+  while (input.good()) {
+    input >> DDLNumber;
+    input >> HWAddr;
+    input >> AvrgSignal;
+    if (input.good()) {
+      AvrgSignal+=baselineshift;
+      if (AvrgSignal<0) AvrgSignal=0;
+      unsigned index=DDLNumber<<16 | HWAddr;
+      mChannelThresholds[index]=AvrgSignal;
+    }
+    // read the rest of the line
+    input.getline(buffer, bufferSize);
+  }
 }

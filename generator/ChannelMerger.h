@@ -32,12 +32,14 @@ class ChannelMerger {
 
   int Normalize(unsigned count);
 
-  int Analyze(TTree& target);
+  int Analyze(TTree& target, const char* statfilename=NULL);
 
   void SetDDLRange(int min, int max) {
     mInputStreamMinDDL=min;
     mInputStreamMaxDDL=max;
   }
+
+  int InitChannelThresholds(const char* filename, int baselineshift=0);
 
  protected:
 
@@ -70,6 +72,7 @@ class ChannelMerger {
   buffer_t* mBuffer;
   buffer_t* mUnderflowBuffer;
   std::map<unsigned int, unsigned int> mChannelPositions;
+  std::map<unsigned int, unsigned int> mChannelThresholds;
   unsigned int mSignalOverflowCount;
   /// general interface to data
   AliRawReader* mRawReader;
