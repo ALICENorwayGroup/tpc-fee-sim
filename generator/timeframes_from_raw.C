@@ -142,6 +142,7 @@ void timeframes_from_raw()
     // normalization for estimation of baseline
     // not to be used for colision pileup in timeframes
     //merger.Normalize(NCollisions);
+    merger.ApplyZeroSuppression();
     merger.Analyze(*channelstat);
     if (merger.GetSignalOverflowCount() > 0) {
       std::cout << "signal overflow in current timeframe detected" << std::endl;

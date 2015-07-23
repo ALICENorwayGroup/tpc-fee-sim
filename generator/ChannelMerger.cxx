@@ -572,3 +572,67 @@ int ChannelMerger::InitAltroMapping(const char* filename)
   std::cout << "... read altro mapping for " << mChannelMappingPadrow.size() << " channel(s)" << endl;
   return mChannelMappingPadrow.size();
 }
+
+int ChannelMerger::ApplyZeroSuppression()
+{
+  unsigned threshold=mZSThreshold;
+  if (threshold==VOID_SIGNAL) return 0;
+
+  if (mBaselineshift<0) {
+    threshold+=-mBaselineshift;
+  } else if (threshold<=(unsigned)mBaselineshift) {
+    threshold=0;
+  } else {
+    threshold-=mBaselineshift;
+  }
+
+  for (std::map<unsigned int, unsigned int>::const_iterator chit=mChannelPositions.begin();
+       chit!=mChannelPositions.end(); chit++) {
+    unsigned index=chit->first;
+    unsigned position=chit->second;
+    position*=mChannelLenght;
+    bool bSignalPeak=false;
+    for (int i=mChannelLenght-1; i>=0; i--) {
+      unsigned currentSignal=mBuffer[position+i];
+      if (currentSignal == VOID_SIGNAL) {
+	currentSignal=0;
+      }
+
+      if (!bSignalPeak && currentSignal>threshold &&
+	  i>=1 && mBuffer[position+i-1]>threshold && mBuffer[position+i-1]!=VOID_SIGNAL) {
+	// signal peak starts at two consecutive signals over threshold
+	bSignalPeak=true;
+      } else if (bSignalPeak && currentSignal>threshold) {
+	// signal belonging to active signal peak
+      } else if (bSignalPeak && currentSignal<=threshold) {
+	if (i>=1 && mBuffer[position+i-1] != VOID_SIGNAL && mBuffer[position+i-1]>threshold ||
+	    i>=2 && mBuffer[position+i-1] != VOID_SIGNAL && mBuffer[position+i-2] != VOID_SIGNAL && mBuffer[position+i-2]>threshold) {
+	  // signal below threshold after peak, merged if next or
+	  // next to next signal over threshold
+	  // two signal peaks intercepted by one or two consecutive
+	  // signals below threshold are merged
+	} else {
+	  // signal below threshold after peak
+	  bSignalPeak=false;
+	  currentSignal=0;
+	}
+      } else {
+	// suppress signal
+	currentSignal=0;;
+      }
+
+      if (mBaselineshift<0) {
+	if ((int)currentSignal>-mBaselineshift) currentSignal-=-mBaselineshift;
+	else currentSignal=0;
+      } else {
+	// TODO: not sure if this makes sense
+	currentSignal+=mBaselineshift;
+      }
+
+      if (mBuffer[position+i] != VOID_SIGNAL) {
+	mBuffer[position+i]=currentSignal;
+      }
+    }
+  }
+  return 0;
+}

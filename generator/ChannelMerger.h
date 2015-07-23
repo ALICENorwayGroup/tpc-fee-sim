@@ -51,6 +51,8 @@ class ChannelMerger {
 
   int InitAltroMapping(const char* filename);
 
+  int ApplyZeroSuppression();
+
  protected:
 
  private:
