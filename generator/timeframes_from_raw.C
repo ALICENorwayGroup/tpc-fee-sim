@@ -49,9 +49,13 @@ void timeframes_from_raw()
   }
 
   // statistics analysis
-  TH1* hCollisionTimes=new TH1F("hCollisionTimes", "Time between individual collisions in TF", 100, 0., 2.);
+  TH1* hCollisionTimes=new TH1F("hCollisionTimes", "Time difference of collisions in TF", 100, 0., 2.);
   hCollisionTimes->GetXaxis()->SetTitle("time relative to TF");
   hCollisionTimes->GetYaxis()->SetTitle("count");
+
+  TH1* hCollisionOffset=new TH1F("hCollisionOffset", "Offset for individual collisions in TF", 100, 0., 2.);
+  hCollisionOffset->GetXaxis()->SetTitle("time relative to TF");
+  hCollisionOffset->GetYaxis()->SetTitle("count");
 
   TH1* hNCollisions=new TH1F("hNCollisions", "Number of collisions in TF", 20, 0., 20.);
   hNCollisions->GetXaxis()->SetTitle("number of collisions in TF");
@@ -94,7 +98,14 @@ void timeframes_from_raw()
 
   std::vector<float> singleTF;
 
+  // backup of last collision offset for calculation of time
+  // difference
+  float lastTime=0.;
+
   while (TimeFrameNo++<g_nframes || g_nframes<0) {
+    // collision offsets are with respect to the end of timeframe
+    lastTime+=1.;
+
     const std::vector<float>& randomTF=generator.SimulateCollisionSequence();
     // merge random number of collisions at random offsets
     const std::vector<float>& tf=randomTF;
@@ -107,9 +118,16 @@ void timeframes_from_raw()
 
     //const std::vector<float>& tf=singleTF;
 
-    if (hCollisionTimes) {
+    if (hCollisionOffset || hCollisionTimes) {
       for (unsigned i=0; i<tf.size(); i++) {
-	hCollisionTimes->Fill(tf[i]);
+	if (hCollisionOffset) hCollisionOffset->Fill(tf[i]);
+	if (lastTime<0.) {
+	  lastTime=tf[i];
+	} else {
+	  lastTime-=tf[i];
+	  if (hCollisionTimes) hCollisionTimes->Fill(lastTime);
+	  lastTime=tf[i];
+	}
       }
     }
     if (hNCollisions) {
@@ -157,6 +175,9 @@ void timeframes_from_raw()
 
   if (hCollisionTimes)
     hCollisionTimes->Write();
+
+  if (hCollisionOffset)
+    hCollisionOffset->Write();
 
   of->Close();
 }
