@@ -20,9 +20,11 @@ ChannelMerger::ChannelMerger()
   , mBuffer(NULL) // TODO change to nullptr when moving to c++11
   , mUnderflowBuffer(NULL) // TODO change to nullptr when moving to c++11
   , mChannelPositions()
-  , mChannelThresholds()
+  , mChannelBaseline()
   , mChannelMappingPadrow()
   , mChannelMappingPad()
+  , mZSThreshold(VOID_SIGNAL)
+  , mBaselineshift(0)
   , mSignalOverflowCount(0)
   , mRawReader(NULL)
   , mInputStream(NULL)
@@ -186,10 +188,24 @@ int ChannelMerger::AddChannel(float offset, unsigned int index, AliAltroRawStrea
     //std::cout << "using channel with index " << std::hex << std::setw(8) << index << " at position " << std::dec << position << std::endl;
   }
 
-  unsigned int threshold=VOID_SIGNAL;
-  if (mChannelThresholds.find(index) != mChannelThresholds.end()) {
-    threshold = mChannelThresholds[index];
+  unsigned int baseline=0;
+  if (mChannelBaseline.find(index) != mChannelBaseline.end()) {
+    baseline = mChannelBaseline[index];
   }
+
+  unsigned int threshold=mZSThreshold;
+  if (threshold != VOID_SIGNAL) {
+    if (mBaselineshift<0) {
+      threshold+=-mBaselineshift;
+    } else if (threshold<=(unsigned)mBaselineshift) {
+      threshold=0;
+    } else {
+      threshold-=mBaselineshift;
+    }
+    // adjust threshold to baseline
+    threshold+=baseline;
+  }
+
   unsigned reqsize=position + 1; // need space for one channel starting at position
   reqsize *= mChannelLenght * sizeof(buffer_t);
   if (reqsize > mBufferSize) {
@@ -219,6 +235,8 @@ int ChannelMerger::AddChannel(float offset, unsigned int index, AliAltroRawStrea
       }
 
       unsigned currentSignal=signals[i];
+      unsigned originalSignal=signals[i];
+
       // ZS
       if (threshold!=VOID_SIGNAL) {
 	if (!bSignalPeak && currentSignal>threshold &&
@@ -237,24 +255,28 @@ int ChannelMerger::AddChannel(float offset, unsigned int index, AliAltroRawStrea
 	  } else {
 	    // signal below threshold after peak
 	    bSignalPeak=false;
-	    continue;
+	    currentSignal=0;
 	  }
 	} else {
 	  // suppress signal
-	  continue;
+	  currentSignal=0;;
 	}
-	// subtract pedestal value
-	// TODO: right now there are no separate pedestal and threshold values
-	// so one has to set values in between merged peaks to zero
-	if (currentSignal<threshold) currentSignal=0;
-	else currentSignal-=threshold;
       }
+      // subtract baseline
+      if (originalSignal<baseline) originalSignal=0;
+      else originalSignal-=baseline;
+
+      unsigned tb=baseline;
+      if (mBaselineshift<0) tb+=-mBaselineshift;
+      else if ((unsigned)mBaselineshift<tb) tb-=mBaselineshift;
+      if (currentSignal<tb) currentSignal=0;
+      else currentSignal-=tb;
 
       int timebin=startTime-i;
       if (timebin < (int)mChannelLenght && timebin >= 0) {
 	if (mBuffer[position+timebin] == VOID_SIGNAL) {
 	  // first value in this timebin
-	  mBuffer[position+timebin]=currentSignal;
+	  mBuffer[position+timebin]=originalSignal;
 	} else if (mBuffer[position+timebin] > MAX_ACCUMULATED_SIGNAL-currentSignal) {
 	  // range overflow
 	  assert(0); // stop here or count errors if assert disabled (NDEBUG)
@@ -274,7 +296,7 @@ int ChannelMerger::AddChannel(float offset, unsigned int index, AliAltroRawStrea
 	timebin += mChannelLenght;
 	if (mUnderflowBuffer[position+timebin] == VOID_SIGNAL) {
 	  // first value in this timebin
-	  mUnderflowBuffer[position+timebin]=currentSignal;
+	  mUnderflowBuffer[position+timebin]=originalSignal;
 	} else if (mUnderflowBuffer[position+timebin] > MAX_ACCUMULATED_SIGNAL-currentSignal) {
 	  // range overflow
 	  mUnderflowBuffer[position+timebin] = MAX_ACCUMULATED_SIGNAL;
@@ -417,7 +439,7 @@ int ChannelMerger::Analyze(TTree& target, const char* statfilename)
 	PadRow>=0) {
       TString name;
       name.Form("DDL_%d_HWAddr_%d_PadRow_%d_Pad_%d", DDLNumber, HWAddr, PadRow, Pad);
-      hChannel=new TH1F(name, name, mChannelLenght, 0, mChannelLenght-1);
+      hChannel=new TH1F(name, name, mChannelLenght, 0., mChannelLenght);
       mChannelHistograms->Add(hChannel);
       nChannelHistograms++;
     }
@@ -488,11 +510,11 @@ int ChannelMerger::Analyze(TTree& target, const char* statfilename)
   return 0;
 }
 
-int ChannelMerger::InitChannelThresholds(const char* filename, int baselineshift)
+int ChannelMerger::InitChannelBaseline(const char* filename, int baselineshift)
 {
   std::ifstream input(filename);
   if (!input.good()) return -1;
-  std::cout << "reading channel thresholds from file " << filename << endl;
+  std::cout << "reading channel baseline configuration from file " << filename << std::endl;
 
   int DDLNumber=-1;
   int HWAddr=-1;
@@ -503,6 +525,7 @@ int ChannelMerger::InitChannelThresholds(const char* filename, int baselineshift
   const int bufferSize=1024;
   char buffer[bufferSize];
 
+  mBaselineshift=baselineshift;
   while (input.good()) {
     input >> DDLNumber;
     input >> HWAddr;
@@ -511,7 +534,7 @@ int ChannelMerger::InitChannelThresholds(const char* filename, int baselineshift
       AvrgSignal+=baselineshift;
       if (AvrgSignal<0) AvrgSignal=0;
       unsigned index=DDLNumber<<16 | HWAddr;
-      mChannelThresholds[index]=AvrgSignal;
+      mChannelBaseline[index]=AvrgSignal;
     }
     // read the rest of the line
     input.getline(buffer, bufferSize);

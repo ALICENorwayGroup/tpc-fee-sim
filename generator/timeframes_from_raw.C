@@ -39,8 +39,10 @@ void timeframes_from_raw()
   GeneratorTF generator(g_rate);
   ChannelMerger merger;
   merger.SetDDLRange(0, 1);
-  merger.InitChannelThresholds("pedestal.dat", 2);
+  merger.SetPadRowRange(0, 10);
+  merger.InitChannelBaseline("pedestal.dat", -5);
   merger.InitAltroMapping("mapping.dat");
+  merger.InitZeroSuppression(2);
   bool bHaveSignalOverflow=false;
 
   std::istream* inputfiles=&std::cin;
@@ -137,7 +139,9 @@ void timeframes_from_raw()
     NCollisions=tf.size();
     merger.StartTimeframe();
     int mergedCollisions=merger.MergeCollisions(tf, *inputfiles);
-    merger.Normalize(NCollisions);
+    // normalization for estimation of baseline
+    // not to be used for colision pileup in timeframes
+    //merger.Normalize(NCollisions);
     merger.Analyze(*channelstat);
     if (merger.GetSignalOverflowCount() > 0) {
       std::cout << "signal overflow in current timeframe detected" << std::endl;

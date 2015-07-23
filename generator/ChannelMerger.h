@@ -45,7 +45,9 @@ class ChannelMerger {
     mMaxPadRow=max;
   }
 
-  int InitChannelThresholds(const char* filename, int baselineshift=0);
+  void InitZeroSuppression(unsigned int threshold) {mZSThreshold=threshold;}
+
+  int InitChannelBaseline(const char* filename, int baselineshift=0);
 
   int InitAltroMapping(const char* filename);
 
@@ -80,9 +82,11 @@ class ChannelMerger {
   buffer_t* mBuffer;
   buffer_t* mUnderflowBuffer;
   std::map<unsigned int, unsigned int> mChannelPositions;
-  std::map<unsigned int, unsigned int> mChannelThresholds;
+  std::map<unsigned int, unsigned int> mChannelBaseline;
   std::map<unsigned int, unsigned int> mChannelMappingPadrow;
   std::map<unsigned int, unsigned int> mChannelMappingPad;
+  unsigned int mZSThreshold;
+  int mBaselineshift;
   unsigned int mSignalOverflowCount;
   /// general interface to data
   AliRawReader* mRawReader;
