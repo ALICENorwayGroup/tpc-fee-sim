@@ -41,6 +41,8 @@ class ChannelMerger {
 
   int InitChannelThresholds(const char* filename, int baselineshift=0);
 
+  int InitAltroMapping(const char* filename);
+
  protected:
 
  private:
@@ -73,6 +75,8 @@ class ChannelMerger {
   buffer_t* mUnderflowBuffer;
   std::map<unsigned int, unsigned int> mChannelPositions;
   std::map<unsigned int, unsigned int> mChannelThresholds;
+  std::map<unsigned int, unsigned int> mChannelMappingPadrow;
+  std::map<unsigned int, unsigned int> mChannelMappingPad;
   unsigned int mSignalOverflowCount;
   /// general interface to data
   AliRawReader* mRawReader;

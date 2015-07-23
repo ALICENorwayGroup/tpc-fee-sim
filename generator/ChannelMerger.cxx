@@ -19,6 +19,8 @@ ChannelMerger::ChannelMerger()
   , mUnderflowBuffer(NULL) // TODO change to nullptr when moving to c++11
   , mChannelPositions()
   , mChannelThresholds()
+  , mChannelMappingPadrow()
+  , mChannelMappingPad()
   , mSignalOverflowCount(0)
   , mRawReader(NULL)
   , mInputStream(NULL)
@@ -375,6 +377,11 @@ int ChannelMerger::Analyze(TTree& target, const char* statfilename)
     position*=mChannelLenght;
     DDLNumber=(index&0xffff0000)>>16;
     HWAddr=index&0x0000ffff;
+    if (mChannelMappingPadrow.find(index) != mChannelMappingPadrow.end()) {
+      PadRow=mChannelMappingPadrow[index];
+    } else {
+      PadRow=-1;
+    }
     MinSignal=-1;
     MaxSignal=-1;
     MinSignalDiff=-1;
@@ -466,4 +473,36 @@ int ChannelMerger::InitChannelThresholds(const char* filename, int baselineshift
     // read the rest of the line
     input.getline(buffer, bufferSize);
   }
+}
+
+int ChannelMerger::InitAltroMapping(const char* filename)
+{
+  std::ifstream input(filename);
+  if (!input.good()) return -1;
+  std::cout << "reading altro mapping from file " << filename << endl;
+
+  int DDLNumber=-1;
+  int HWAddr=-1;
+  int Padrow=-1;
+  int Pad=-1;
+
+  const int bufferSize=1024;
+  char buffer[bufferSize];
+
+  while (input.good()) {
+    input >> DDLNumber;
+    input >> HWAddr;
+    input >> Padrow;
+    input >> Pad;
+    if (input.good()) {
+      unsigned index=DDLNumber<<16 | HWAddr;
+      mChannelMappingPadrow[index]=Padrow;
+      mChannelMappingPad[index]=Pad;
+    }
+    // read the rest of the line
+    input.getline(buffer, bufferSize);
+  }
+
+  std::cout << "... read altro mapping for " << mChannelMappingPadrow.size() << " channel(s)" << endl;
+  return mChannelMappingPadrow.size();
 }
