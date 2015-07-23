@@ -291,6 +291,7 @@ int ChannelMerger::Analyze(TTree& target, const char* statfilename)
   // tree setup
   int DDLNumber=0;
   int HWAddr=0;
+  int PadRow=0;
   int MinSignal=0;
   int MaxSignal=0;
   int AvrgSignal=0;
@@ -311,6 +312,10 @@ int ChannelMerger::Analyze(TTree& target, const char* statfilename)
 
   if (target.GetBranch("HWAddr") != NULL) {
     target.SetBranchAddress("HWAddr", &HWAddr);
+  }
+
+  if (target.GetBranch("PadRow") != NULL) {
+    target.SetBranchAddress("PadRow", &PadRow);
   }
 
   if (target.GetBranch("MinSignal") != NULL) {
