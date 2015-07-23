@@ -5,7 +5,7 @@
 CollisionDistribution::CollisionDistribution(float rate)
   : mFramesize(1.0)
   , mRate(rate)
-  , mOffset(-1.)
+  , mOffset(0.)
   , mCollisionTimes()
   , mSeed(std::chrono::system_clock::now().time_since_epoch().count())
   , mGenerator(mSeed)
@@ -31,7 +31,7 @@ const std::vector<float>& CollisionDistribution::NextSequence()
 
   // now reverse with respect to frame size, the earlier collisions
   // have drifted in the TF volume
-  for (auto&& coltime : mCollisionTimes) coltime=mFramesize-coltime;
+  //for (auto&& coltime : mCollisionTimes) coltime=mFramesize-coltime;
 
   return mCollisionTimes;
 }
