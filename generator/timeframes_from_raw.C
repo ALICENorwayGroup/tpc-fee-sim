@@ -29,15 +29,17 @@
 #include <fstream>
 #include "TTree.h"
 #include "TFile.h"
+#include "TH1F.h"
 
 const float g_rate=5.;    // rate with respect to unit time, i.e. framesize
-const int   g_nframes=5;    // number of timeframes to be generated
+const int   g_nframes=1000;    // number of timeframes to be generated
 
 void timeframes_from_raw()
 {
   GeneratorTF generator(g_rate);
   ChannelMerger merger;
-  merger.SetDDLRange(0, 71);
+  merger.SetDDLRange(0, 1);
+  merger.InitChannelThresholds("pedestal.dat", 2);
   bool bHaveSignalOverflow=false;
 
   std::istream* inputfiles=&std::cin;
@@ -47,10 +49,19 @@ void timeframes_from_raw()
   }
 
   // statistics analysis
+  TH1* hCollisionTimes=new TH1F("hCollisionTimes", "Time between individual collisions in TF", 100, 0., 2.);
+  hCollisionTimes->GetXaxis()->SetTitle("time relative to TF");
+  hCollisionTimes->GetYaxis()->SetTitle("count");
+
+  TH1* hNCollisions=new TH1F("hNCollisions", "Number of collisions in TF", 20, 0., 20.);
+  hNCollisions->GetXaxis()->SetTitle("number of collisions in TF");
+  hNCollisions->GetYaxis()->SetTitle("count");
+
   int TimeFrameNo=0;
   int NCollisions=0;
   int DDLNumber=0;
   int HWAddr=0;
+  int PadRow=0;
   int MinSignal=0;
   int MaxSignal=0;
   int AvrgSignal=0;
@@ -68,6 +79,7 @@ void timeframes_from_raw()
     channelstat->Branch("NCollisions"    , &NCollisions     , "NCollisions/I");
     channelstat->Branch("DDLNumber"      , &DDLNumber       , "DDLNumber/I");
     channelstat->Branch("HWAddr"         , &HWAddr          , "HWAddr/I");
+    channelstat->Branch("PadRow"         , &PadRow          , "PadRow/I");
     channelstat->Branch("MinSignal"      , &MinSignal       , "MinSignal/I");
     channelstat->Branch("MaxSignal"      , &MaxSignal       , "MaxSignal/I");
     channelstat->Branch("AvrgSignal"     , &AvrgSignal      , "AvrgSignal/I");
@@ -85,16 +97,24 @@ void timeframes_from_raw()
   while (TimeFrameNo++<g_nframes || g_nframes<0) {
     const std::vector<float>& randomTF=generator.SimulateCollisionSequence();
     // merge random number of collisions at random offsets
-    //const std::vector<float>& tf=randomTF;
+    const std::vector<float>& tf=randomTF;
 
     // merge random number of collisions, each at offset 0.
     //singleTF.resize(randomTF.size(), 0.);
 
     // merge fixed number of collisions, each at offset 0.
-    singleTF.resize(1, 0.);
+    //singleTF.resize(1, 0.);
 
-    const std::vector<float>& tf=singleTF;
+    //const std::vector<float>& tf=singleTF;
 
+    if (hCollisionTimes) {
+      for (unsigned i=0; i<tf.size(); i++) {
+	hCollisionTimes->Fill(tf[i]);
+      }
+    }
+    if (hNCollisions) {
+      hNCollisions->Fill(tf.size());
+    }
     NCollisions=tf.size();
     merger.StartTimeframe();
     int mergedCollisions=merger.MergeCollisions(tf, *inputfiles);
@@ -132,6 +152,11 @@ void timeframes_from_raw()
     channelstat->Print();
     channelstat->Write();
   }
+  if (hNCollisions)
+    hNCollisions->Write();
+
+  if (hCollisionTimes)
+    hCollisionTimes->Write();
 
   of->Close();
 }
