@@ -8,6 +8,7 @@
 class AliAltroRawStreamV3;
 class AliRawReader;
 class TTree;
+class TFolder;
 
 class ChannelMerger {
  public:
@@ -37,6 +38,11 @@ class ChannelMerger {
   void SetDDLRange(int min, int max) {
     mInputStreamMinDDL=min;
     mInputStreamMaxDDL=max;
+  }
+
+  void SetPadRowRange(int min, int max) {
+    mMinPadRow=min;
+    mMaxPadRow=max;
   }
 
   int InitChannelThresholds(const char* filename, int baselineshift=0);
@@ -86,5 +92,9 @@ class ChannelMerger {
   int mInputStreamMinDDL;
   /// max DDL number
   int mInputStreamMaxDDL;
+  int mMinPadRow;
+  int mMaxPadRow;
+
+  TFolder* mChannelHistograms;
 };
 #endif

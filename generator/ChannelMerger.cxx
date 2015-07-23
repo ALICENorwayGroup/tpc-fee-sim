@@ -4,6 +4,8 @@
 #include "TString.h"
 #include "TGrid.h"
 #include "TTree.h"
+#include "TFolder.h"
+#include "TH1F.h"
 #include <iomanip>
 #include <assert.h>
 #include <fstream>
@@ -26,7 +28,11 @@ ChannelMerger::ChannelMerger()
   , mInputStream(NULL)
   , mInputStreamMinDDL(-1)
   , mInputStreamMaxDDL(-1)
+  , mChannelHistograms(new TFolder("ChannelHistograms", "ChannelHistograms"))
+  , mMinPadRow(-1)
+  , mMaxPadRow(-1)
 {
+  if (mChannelHistograms) mChannelHistograms->IsOwner();
 }
 
 ChannelMerger::~ChannelMerger()
@@ -37,6 +43,11 @@ ChannelMerger::~ChannelMerger()
   mUnderflowBuffer=NULL;
   if (mInputStream) delete mInputStream;
   if (mRawReader) delete mRawReader;
+
+  if (mChannelHistograms) {
+    mChannelHistograms->SaveAs("ChannelHistograms.root");
+    delete mChannelHistograms;
+  }
 }
 
 int ChannelMerger::MergeCollisions(std::vector<float> collisiontimes, std::istream& inputfiles)
@@ -73,6 +84,12 @@ int ChannelMerger::MergeCollisions(std::vector<float> collisiontimes, std::istre
 	  if (mInputStream->IsChannelBad()) continue;
 	  unsigned HWAddress=mInputStream->GetHWAddress();
 	  unsigned index=DDLNumber<<16 | HWAddress;
+	  if (mMinPadRow >=0 &&
+	      (mChannelMappingPadrow.find(index) == mChannelMappingPadrow.end() ||
+	       mChannelMappingPadrow[index] < (unsigned)mMinPadRow)) continue;
+	  if (mMaxPadRow >=0 &&
+	      (mChannelMappingPadrow.find(index) == mChannelMappingPadrow.end() ||
+	       mChannelMappingPadrow[index] > (unsigned)mMaxPadRow)) continue;
 	  AddChannel(*collisionOffset, index, *mInputStream);
 	}
       }
@@ -201,15 +218,16 @@ int ChannelMerger::AddChannel(float offset, unsigned int index, AliAltroRawStrea
 	std::cout << "invalid signal value " << signals[i] << std::endl;
       }
 
+      unsigned currentSignal=signals[i];
       // ZS
       if (threshold!=VOID_SIGNAL) {
-	if (!bSignalPeak && signals[i]>threshold &&
+	if (!bSignalPeak && currentSignal>threshold &&
 	    i+1<bunchLength && signals[i+1]>threshold) {
 	  // signal peak starts at two consecutive signals over threshold
 	  bSignalPeak=true;
-	} else if (bSignalPeak && signals[i]>threshold) {
+	} else if (bSignalPeak && currentSignal>threshold) {
 	  // signal belonging to active signal peak
-	} else if (bSignalPeak && signals[i]<=threshold) {
+	} else if (bSignalPeak && currentSignal<=threshold) {
 	  if (i+1<bunchLength && signals[i+1]>threshold ||
 	      i+2<bunchLength && signals[i+2]>threshold) {
 	    // signal below threshold after peak, merged if next or
@@ -225,40 +243,45 @@ int ChannelMerger::AddChannel(float offset, unsigned int index, AliAltroRawStrea
 	  // suppress signal
 	  continue;
 	}
+	// subtract pedestal value
+	// TODO: right now there are no separate pedestal and threshold values
+	// so one has to set values in between merged peaks to zero
+	if (currentSignal<threshold) currentSignal=0;
+	else currentSignal-=threshold;
       }
 
       int timebin=startTime-i;
       if (timebin < (int)mChannelLenght && timebin >= 0) {
 	if (mBuffer[position+timebin] == VOID_SIGNAL) {
 	  // first value in this timebin
-	  mBuffer[position+timebin]=signals[i];
-	} else if (mBuffer[position+timebin] > MAX_ACCUMULATED_SIGNAL-signals[i]) {
+	  mBuffer[position+timebin]=currentSignal;
+	} else if (mBuffer[position+timebin] > MAX_ACCUMULATED_SIGNAL-currentSignal) {
 	  // range overflow
 	  assert(0); // stop here or count errors if assert disabled (NDEBUG)
 	  if (mSignalOverflowCount<10) {
 	    std::cout << "overflow at timebin " << timebin
 		      << " MAX_ACCUMULATED_SIGNAL=" << MAX_ACCUMULATED_SIGNAL
 		      << " buffer=" << mBuffer[position+timebin]
-		      << " signal=" << signals[i]
+		      << " signal=" << currentSignal
 		      << std::endl;
 	  }
 	  mBuffer[position+timebin] = MAX_ACCUMULATED_SIGNAL;
 	  mSignalOverflowCount++;
 	} else {
-	mBuffer[position+timebin]+=signals[i];
+	mBuffer[position+timebin]+=currentSignal;
 	}
       } else if (timebin < 0 && (timebin + (int)mChannelLenght) >= 0) {
 	timebin += mChannelLenght;
 	if (mUnderflowBuffer[position+timebin] == VOID_SIGNAL) {
 	  // first value in this timebin
-	  mUnderflowBuffer[position+timebin]=signals[i];
-	} else if (mUnderflowBuffer[position+timebin] > MAX_ACCUMULATED_SIGNAL-signals[i]) {
+	  mUnderflowBuffer[position+timebin]=currentSignal;
+	} else if (mUnderflowBuffer[position+timebin] > MAX_ACCUMULATED_SIGNAL-currentSignal) {
 	  // range overflow
 	  mUnderflowBuffer[position+timebin] = MAX_ACCUMULATED_SIGNAL;
 	  // overflow is only counted for buffer of current timeframe
 	  assert(0); // stop here
 	} else {
-	mUnderflowBuffer[position+timebin]+=signals[i];
+	mUnderflowBuffer[position+timebin]+=currentSignal;
 	}
       } else {
 	// TODO: some out-of-range counter
@@ -294,6 +317,7 @@ int ChannelMerger::Analyze(TTree& target, const char* statfilename)
   int DDLNumber=0;
   int HWAddr=0;
   int PadRow=0;
+  int Pad=0;
   int MinSignal=0;
   int MaxSignal=0;
   int AvrgSignal=0;
@@ -370,6 +394,9 @@ int ChannelMerger::Analyze(TTree& target, const char* statfilename)
     }
   }
 
+  // TODO: make better condition
+  const int maxNChannelHistograms=1000;
+  static int nChannelHistograms=0;
   for (std::map<unsigned int, unsigned int>::const_iterator chit=mChannelPositions.begin();
        chit!=mChannelPositions.end(); chit++) {
     unsigned index=chit->first;
@@ -379,8 +406,20 @@ int ChannelMerger::Analyze(TTree& target, const char* statfilename)
     HWAddr=index&0x0000ffff;
     if (mChannelMappingPadrow.find(index) != mChannelMappingPadrow.end()) {
       PadRow=mChannelMappingPadrow[index];
+      Pad=mChannelMappingPad[index];
     } else {
       PadRow=-1;
+      Pad=-1;
+    }
+    TH1* hChannel=NULL;
+    if (mChannelHistograms!=NULL &&
+	nChannelHistograms<maxNChannelHistograms &&
+	PadRow>=0) {
+      TString name;
+      name.Form("DDL_%d_HWAddr_%d_PadRow_%d_Pad_%d", DDLNumber, HWAddr, PadRow, Pad);
+      hChannel=new TH1F(name, name, mChannelLenght, 0, mChannelLenght-1);
+      mChannelHistograms->Add(hChannel);
+      nChannelHistograms++;
     }
     MinSignal=-1;
     MaxSignal=-1;
@@ -400,6 +439,9 @@ int ChannelMerger::Analyze(TTree& target, const char* statfilename)
 	  nBunchSamples=0;
 	}
 	continue;
+      }
+      if (hChannel) {
+	hChannel->Fill(i, signal);
       }
       nBunchSamples++;
       if (MinTimebin<0) MinTimebin=i;
@@ -435,6 +477,7 @@ int ChannelMerger::Analyze(TTree& target, const char* statfilename)
 		  << std::endl;
     }
   }
+  nChannelHistograms=maxNChannelHistograms;
 
   if (statfile) {
     statfile->close();
