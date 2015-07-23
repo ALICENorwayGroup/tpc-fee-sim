@@ -40,6 +40,7 @@ void timeframes_from_raw()
   ChannelMerger merger;
   merger.SetDDLRange(0, 1);
   merger.InitChannelThresholds("pedestal.dat", 2);
+  merger.InitAltroMapping("mapping.dat");
   bool bHaveSignalOverflow=false;
 
   std::istream* inputfiles=&std::cin;
