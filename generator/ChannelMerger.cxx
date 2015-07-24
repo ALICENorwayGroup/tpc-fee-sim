@@ -417,8 +417,18 @@ int ChannelMerger::Analyze(TTree& target, const char* statfilename)
   }
 
   // TODO: make better condition
-  const int maxNChannelHistograms=1000;
-  static int nChannelHistograms=0;
+  const int maxNTimeframes=10; // max number of timeframes with stored histograms
+  static int timeframeNo=0;
+  const int maxNChannelHistograms=1000; // max number of channel histograms written per timeframe
+  int nChannelHistograms=0;
+  TFolder* currentFolder=NULL;
+  if (mChannelHistograms &&
+      timeframeNo < maxNTimeframes) {
+    TString name;
+    name.Form("timeframe_%03d", timeframeNo);
+    currentFolder = new TFolder(name, name);
+    mChannelHistograms->Add(currentFolder);
+  }
   for (std::map<unsigned int, unsigned int>::const_iterator chit=mChannelPositions.begin();
        chit!=mChannelPositions.end(); chit++) {
     unsigned index=chit->first;
@@ -434,13 +444,13 @@ int ChannelMerger::Analyze(TTree& target, const char* statfilename)
       Pad=-1;
     }
     TH1* hChannel=NULL;
-    if (mChannelHistograms!=NULL &&
+    if (currentFolder!=NULL &&
 	nChannelHistograms<maxNChannelHistograms &&
 	PadRow>=0) {
       TString name;
-      name.Form("DDL_%d_HWAddr_%d_PadRow_%d_Pad_%d", DDLNumber, HWAddr, PadRow, Pad);
+      name.Form("TF_%03d_DDL_%d_HWAddr_%d_PadRow_%d_Pad_%d", timeframeNo, DDLNumber, HWAddr, PadRow, Pad);
       hChannel=new TH1F(name, name, mChannelLenght, 0., mChannelLenght);
-      mChannelHistograms->Add(hChannel);
+      currentFolder->Add(hChannel);
       nChannelHistograms++;
     }
     MinSignal=-1;
@@ -499,7 +509,7 @@ int ChannelMerger::Analyze(TTree& target, const char* statfilename)
 		  << std::endl;
     }
   }
-  nChannelHistograms=maxNChannelHistograms;
+  timeframeNo++;
 
   if (statfile) {
     statfile->close();
@@ -614,19 +624,21 @@ int ChannelMerger::ApplyZeroSuppression()
 	} else {
 	  // signal below threshold after peak
 	  bSignalPeak=false;
-	  currentSignal=0;
+	  currentSignal=VOID_SIGNAL;
 	}
       } else {
 	// suppress signal
-	currentSignal=0;;
+	currentSignal=VOID_SIGNAL;
       }
 
-      if (mBaselineshift<0) {
-	if ((int)currentSignal>-mBaselineshift) currentSignal-=-mBaselineshift;
-	else currentSignal=0;
-      } else {
-	// TODO: not sure if this makes sense
-	currentSignal+=mBaselineshift;
+      if (currentSignal != VOID_SIGNAL) {
+	if (mBaselineshift<0) {
+	  if ((int)currentSignal>-mBaselineshift) currentSignal-=-mBaselineshift;
+	  else currentSignal=0;
+	} else {
+	  // TODO: not sure if this makes sense
+	  currentSignal+=mBaselineshift;
+	}
       }
 
       if (mBuffer[position+i] != VOID_SIGNAL) {
