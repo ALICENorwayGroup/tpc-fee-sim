@@ -30,6 +30,7 @@
 #include "TTree.h"
 #include "TFile.h"
 #include "TH1F.h"
+#include "TSystem.h"
 
 const float g_rate=5.;    // rate with respect to unit time, i.e. framesize
 const int   g_nframes=1000;    // number of timeframes to be generated
@@ -155,6 +156,16 @@ void timeframes_from_raw()
       // probably no more input data to be read
       std::cout << "simulated " << TimeFrameNo-1 << " timeframe(s)" << std::endl;
       break;
+    }
+
+    if (0) {
+      // write timeframe data to file
+      TString dirname("tfdata");
+      TString command("mkdir -p "); command+=dirname;
+      gSystem->Exec(command.Data());
+      TString filename;
+      filename.Form("%s/tf%04d.dat", dirname.Data(), TimeFrameNo-1);
+      merger.WriteTimeframe(filename.Data());
     }
 
     std::cout << "Successfully generated timeframe " << TimeFrameNo << " from " << tf.size() << " collision(s)" << std::endl;

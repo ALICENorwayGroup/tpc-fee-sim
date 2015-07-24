@@ -648,3 +648,62 @@ int ChannelMerger::ApplyZeroSuppression()
   }
   return 0;
 }
+
+int ChannelMerger::WriteTimeframe(const char* filename)
+{
+  std::ofstream output(filename);
+  if (!output.good()) {
+    std::cerr << "can not open file '" << filename << "' for writing timeframe data" << std::endl;
+    return -1;
+  }
+
+  unsigned nChannels=0;
+  for (std::map<unsigned int, unsigned int>::const_iterator chit=mChannelPositions.begin();
+       chit!=mChannelPositions.end(); chit++, nChannels++) {
+    unsigned index=chit->first;
+    unsigned position=chit->second;
+    unsigned DDLNumber=(index&0xffff0000)>>16;
+    unsigned HWAddr=index&0x0000ffff;
+    position*=mChannelLenght;
+    unsigned NBunches=0;
+    int nBunchSamples=0;
+    unsigned int BunchLength[mChannelLenght];
+    unsigned int BunchTime[mChannelLenght];
+    // loop over channel to find number of bunches and length of bunches
+    for (int iSignal=mChannelLenght-1; iSignal>=0; iSignal--) {
+      int signal=mBuffer[position+iSignal];
+      if (signal == VOID_SIGNAL) {
+	if (nBunchSamples>0) {
+	  // bunch end
+	  BunchLength[NBunches++]=nBunchSamples;
+	  nBunchSamples=0;
+	}
+	continue;
+      }
+      if (nBunchSamples++==0) {
+	// bunch start
+	BunchTime[NBunches]=iSignal;
+      }
+    }
+    if (nBunchSamples>0) {
+      BunchLength[NBunches++]=nBunchSamples;
+      nBunchSamples=0;
+    }
+    if (nChannels>0) output << std::endl;
+    // write channel header
+    output << " " << std::setw(4) << DDLNumber
+	   << " " << std::setw(6) << HWAddr
+	   << " " << std::setw(4) << NBunches;
+    // write bunches
+    for (unsigned iBunch=0; iBunch<NBunches; iBunch++) {
+      output << " " << std::setw(4) << BunchLength[iBunch]
+	     << " " << std::setw(4) << BunchTime[iBunch];
+      for (unsigned i=0; i<BunchLength[iBunch]; i++) {
+	output << " " << std::setw(4) << mBuffer[position+BunchTime[iBunch]-i];
+      }
+    }
+    output << std::endl;
+  }
+
+  return 0;
+}

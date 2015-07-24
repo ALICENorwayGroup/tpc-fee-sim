@@ -53,6 +53,8 @@ class ChannelMerger {
 
   int ApplyZeroSuppression();
 
+  int WriteTimeframe(const char* filename);
+
  protected:
 
  private:
