@@ -104,11 +104,19 @@ void timeframes_from_raw()
 
   // backup of last collision offset for calculation of time
   // difference
+  // TODO: this variable can be set according to configuration/mode of generator
+  // if configuration is supported by the generator
+  bool bInverseWrtTF=false; // set true if the generator produces offsets wrt end of TF
   float lastTime=0.;
 
   while (TimeFrameNo++<g_nframes || g_nframes<0) {
-    // collision offsets are with respect to the end of timeframe
-    lastTime+=1.;
+    if (bInverseWrtTF) {
+      // collision offsets are with respect to the end of timeframe
+      lastTime+=1.;
+    } else {
+      // collision offsets are with respect to the start of timeframe
+      lastTime-=1.;
+    }
 
     const std::vector<float>& randomTF=generator.SimulateCollisionSequence();
     // merge random number of collisions at random offsets
@@ -125,11 +133,19 @@ void timeframes_from_raw()
     if (hCollisionOffset || hCollisionTimes) {
       for (unsigned i=0; i<tf.size(); i++) {
 	if (hCollisionOffset) hCollisionOffset->Fill(tf[i]);
+	if (bInverseWrtTF) {
 	if (lastTime<0.) {
 	  lastTime=tf[i];
 	} else {
 	  lastTime-=tf[i];
 	  if (hCollisionTimes) hCollisionTimes->Fill(lastTime);
+	  lastTime=tf[i];
+	}
+	} else {
+	  if (lastTime>-1.) {
+	    lastTime=tf[i]-lastTime;
+	    if (hCollisionTimes) hCollisionTimes->Fill(lastTime);
+	  }
 	  lastTime=tf[i];
 	}
       }
