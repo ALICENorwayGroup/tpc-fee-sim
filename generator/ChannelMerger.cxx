@@ -1,6 +1,7 @@
 #include "ChannelMerger.h"
 #include "AliAltroRawStreamV3.h"
 #include "AliRawReader.h"
+#include "AliHLTHuffman.h"
 #include "TString.h"
 #include "TGrid.h"
 #include "TTree.h"
@@ -483,7 +484,7 @@ int ChannelMerger::Analyze(TTree& target, const char* statfilename)
       AvrgSignal+=signal;
       NFilledTimebins++;
       if (i>0 && mBuffer[position+i-1] != VOID_SIGNAL) {
-	signal-=mBuffer[position+i-1] != VOID_SIGNAL;
+	signal-=mBuffer[position+i-1];
 	if (MaxSignalDiff<0 || MaxSignalDiff<(signal>=0?signal:-signal))
 	  MaxSignalDiff=signal;
 	if (MinSignalDiff<0 || MinSignalDiff>(signal>=0?signal:-signal))
@@ -703,6 +704,98 @@ int ChannelMerger::WriteTimeframe(const char* filename)
       }
     }
     output << std::endl;
+  }
+
+  return 0;
+}
+
+int ChannelMerger::DoHuffmanCompression(AliHLTHuffman* pHuffman, bool bTrainingMode, TTree& huffmanstat, TH1& hSignalDiff)
+{
+  // TODO: very quick solution to estimate potentisl of huffman compressions
+  // to be implemented in a more modular fashion
+  // tree setup
+  int DDLNumber=-1;
+  int HWAddr=-1;
+  int PadRow=-2;
+  Float_t HuffmanFactor=1.;
+
+  if (huffmanstat.GetBranch("DDLNumber") != NULL) {
+    huffmanstat.SetBranchAddress("DDLNumber", &DDLNumber);
+  }
+
+  if (huffmanstat.GetBranch("HWAddr") != NULL) {
+    huffmanstat.SetBranchAddress("HWAddr", &HWAddr);
+  }
+
+  if (huffmanstat.GetBranch("PadRow") != NULL) {
+    huffmanstat.SetBranchAddress("PadRow", &PadRow);
+  }
+
+  if (huffmanstat.GetBranch("HuffmanFactor") != NULL) {
+    huffmanstat.SetBranchAddress("HuffmanFactor", &HuffmanFactor);
+  }
+
+  for (std::map<unsigned int, unsigned int>::const_iterator chit=mChannelPositions.begin();
+       chit!=mChannelPositions.end(); chit++) {
+    unsigned index=chit->first;
+    unsigned position=chit->second;
+    position*=mChannelLenght;
+    DDLNumber=(index&0xffff0000)>>16;
+    HWAddr=index&0x0000ffff;
+    if (mChannelMappingPadrow.find(index) != mChannelMappingPadrow.end()) {
+      PadRow=mChannelMappingPadrow[index];
+    } else {
+      PadRow=-1;
+    }
+    HuffmanFactor=0.;
+
+    // TODO: make this a property of the merger/data
+    unsigned signalRange=1024;
+    unsigned signalBitLength=10;
+
+    unsigned bitcount=0;
+    unsigned lastSignal=0;
+    for (unsigned i=0; i<mChannelLenght; i++) {
+      unsigned signal=mBuffer[position+i];
+      if (signal == VOID_SIGNAL) {
+	signal=0;
+      }
+      if (signal >= signalRange) {
+	// TODO: handling of signal exceeding the range needs to be defined.
+	// this should be handled in the pile up algorithm
+	signal=signalRange-1;
+      }
+
+      int signalDiff = signal;
+      signalDiff-=lastSignal;
+      hSignalDiff.Fill(signalDiff);
+      signalDiff+=signalRange;
+      if (signalDiff>=0 && (unsigned)signalDiff<2*signalRange) {
+      } else {
+	std::cout << "signal difference out of range: " << signalDiff << std::endl;
+      }
+      assert(signalDiff>=0 && (unsigned)signalDiff<2*signalRange);
+
+      AliHLTUInt64_t v = signalDiff;
+      if (bTrainingMode) {
+	pHuffman->AddTrainingValue(v);
+      } else {
+	AliHLTUInt64_t length = 0;
+	pHuffman->Encode(v, length);
+	bitcount+=length;
+      }
+      lastSignal=signal;
+    }
+    if (!bTrainingMode && bitcount>0) {
+      bitcount+=(40-bitcount%40); // align to 40 bit altro format
+      HuffmanFactor=mChannelLenght*signalBitLength;
+      HuffmanFactor/=bitcount;
+      huffmanstat.Fill();
+      if (HuffmanFactor<1.) {
+	std::cout << "HuffmanFactor " << HuffmanFactor << " bitcount " << bitcount << std::endl;
+      }
+      assert(HuffmanFactor>=1.);
+    }
   }
 
   return 0;
