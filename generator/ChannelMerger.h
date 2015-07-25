@@ -10,6 +10,7 @@ class AliRawReader;
 class TTree;
 class TFolder;
 class TH1;
+class TH2;
 class AliHLTHuffman;
 
 class ChannelMerger {
@@ -57,7 +58,7 @@ class ChannelMerger {
 
   int WriteTimeframe(const char* filename);
 
-  int DoHuffmanCompression(AliHLTHuffman* pHuffman, bool bTrainingMode, TTree& huffmanstat, TH1& hSignalDiff);
+  int DoHuffmanCompression(AliHLTHuffman* pHuffman, bool bTrainingMode, TH2& hHuffmanFactor, TH1& hSignalDiff);
 
  protected:
 

@@ -7,6 +7,7 @@
 #include "TTree.h"
 #include "TFolder.h"
 #include "TH1F.h"
+#include "TH2F.h"
 #include <iomanip>
 #include <assert.h>
 #include <fstream>
@@ -709,7 +710,7 @@ int ChannelMerger::WriteTimeframe(const char* filename)
   return 0;
 }
 
-int ChannelMerger::DoHuffmanCompression(AliHLTHuffman* pHuffman, bool bTrainingMode, TTree& huffmanstat, TH1& hSignalDiff)
+int ChannelMerger::DoHuffmanCompression(AliHLTHuffman* pHuffman, bool bTrainingMode, TH2& hHuffmanFactor, TH1& hSignalDiff)
 {
   // TODO: very quick solution to estimate potentisl of huffman compressions
   // to be implemented in a more modular fashion
@@ -719,6 +720,7 @@ int ChannelMerger::DoHuffmanCompression(AliHLTHuffman* pHuffman, bool bTrainingM
   int PadRow=-2;
   Float_t HuffmanFactor=1.;
 
+  /*
   if (huffmanstat.GetBranch("DDLNumber") != NULL) {
     huffmanstat.SetBranchAddress("DDLNumber", &DDLNumber);
   }
@@ -734,6 +736,7 @@ int ChannelMerger::DoHuffmanCompression(AliHLTHuffman* pHuffman, bool bTrainingM
   if (huffmanstat.GetBranch("HuffmanFactor") != NULL) {
     huffmanstat.SetBranchAddress("HuffmanFactor", &HuffmanFactor);
   }
+  */
 
   for (std::map<unsigned int, unsigned int>::const_iterator chit=mChannelPositions.begin();
        chit!=mChannelPositions.end(); chit++) {
@@ -790,7 +793,8 @@ int ChannelMerger::DoHuffmanCompression(AliHLTHuffman* pHuffman, bool bTrainingM
       bitcount+=(40-bitcount%40); // align to 40 bit altro format
       HuffmanFactor=mChannelLenght*signalBitLength;
       HuffmanFactor/=bitcount;
-      huffmanstat.Fill();
+      //huffmanstat.Fill();
+      hHuffmanFactor.Fill(PadRow, HuffmanFactor);
       if (HuffmanFactor<1.) {
 	std::cout << "HuffmanFactor " << HuffmanFactor << " bitcount " << bitcount << std::endl;
       }
