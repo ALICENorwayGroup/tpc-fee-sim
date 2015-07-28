@@ -710,7 +710,7 @@ int ChannelMerger::WriteTimeframe(const char* filename)
   return 0;
 }
 
-int ChannelMerger::DoHuffmanCompression(AliHLTHuffman* pHuffman, bool bTrainingMode, TH2& hHuffmanFactor, TH1& hSignalDiff)
+int ChannelMerger::DoHuffmanCompression(AliHLTHuffman* pHuffman, bool bTrainingMode, TH2& hHuffmanFactor, TH1& hSignalDiff, unsigned symbolCutoffLength)
 {
   // TODO: very quick solution to estimate potentisl of huffman compressions
   // to be implemented in a more modular fashion
@@ -785,7 +785,12 @@ int ChannelMerger::DoHuffmanCompression(AliHLTHuffman* pHuffman, bool bTrainingM
       } else {
 	AliHLTUInt64_t length = 0;
 	pHuffman->Encode(v, length);
-	bitcount+=length;
+	if (symbolCutoffLength==0 || length<symbolCutoffLength) {
+	  bitcount+=length;
+	} else {
+	 bitcount+=symbolCutoffLength;
+	 bitcount+=signalBitLength;
+	}
       }
       lastSignal=signal;
     }
@@ -798,7 +803,7 @@ int ChannelMerger::DoHuffmanCompression(AliHLTHuffman* pHuffman, bool bTrainingM
       if (HuffmanFactor<1.) {
 	std::cout << "HuffmanFactor " << HuffmanFactor << " bitcount " << bitcount << std::endl;
       }
-      assert(HuffmanFactor>=1.);
+      //assert(HuffmanFactor>=1.);
     }
   }
 

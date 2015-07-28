@@ -58,7 +58,7 @@ class ChannelMerger {
 
   int WriteTimeframe(const char* filename);
 
-  int DoHuffmanCompression(AliHLTHuffman* pHuffman, bool bTrainingMode, TH2& hHuffmanFactor, TH1& hSignalDiff);
+  int DoHuffmanCompression(AliHLTHuffman* pHuffman, bool bTrainingMode, TH2& hHuffmanFactor, TH1& hSignalDiff, unsigned symbolCutoffLength=0);
 
  protected:
 
