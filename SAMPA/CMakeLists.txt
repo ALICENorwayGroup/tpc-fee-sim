@@ -46,6 +46,8 @@ target_link_libraries( ${LIBRARY_NAME}
   ${DEPENDENCIES}
 )
 
+install(TARGETS ${LIBRARY_NAME} DESTINATION lib)
+
 Set(Exe_Names
   runSAMPA
 )
