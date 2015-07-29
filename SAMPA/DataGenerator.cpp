@@ -66,7 +66,7 @@ void DataGenerator::globalRandomnessSink(){
   std::vector<int> values (constants::NUMBER_OF_SAMPA_CHIPS * constants::SAMPA_NUMBER_INPUT_PORTS, 1);
 
   RandomGenerator randomGenerator;
-  //std::cout << "Reading black events..";
+  //std::cout << "DataGenerator: Reading black events..";
   //readBlackEvents();
 
   //int rounds = ((constants::NUMBER_OF_SAMPA_CHIPS * constants::SAMPA_NUMBER_INPUT_PORTS) - 1) * 30;
@@ -74,7 +74,7 @@ void DataGenerator::globalRandomnessSink(){
   initOccupancy();
   while(currentTimeWindow <= constants::NUMBER_TIME_WINDOWS_TO_SIMULATE){
 
-    std::cout << "Sending data " << currentSample << " | data value: " << lastData <<  endl;
+    //std::cout << "DataGenerator: Sending data " << currentSample << " | data value: " << lastData <<  endl;
     for(int i = 0; i < constants::NUMBER_OF_SAMPA_CHIPS * constants::SAMPA_NUMBER_INPUT_PORTS; i++)
     {
       //int flux = createSingleFlux();
@@ -90,7 +90,7 @@ void DataGenerator::globalRandomnessSink(){
     if(currentSample == constants::NUMBER_OF_SAMPLES_IN_EACH_TIME_WINDOW )//1021 samples
     {
       currentTimeWindow++;
-      std::cout << "Current packetCounter: " << packetCounter << " window: " << currentTimeWindow << endl;
+      std::cout << "DataGenerator: Current packetCounter: " << packetCounter << " window: " << currentTimeWindow << endl;
       currentSample = 0;
     }
     wait((constants::DG_WAIT_TIME), SC_NS);
@@ -114,12 +114,12 @@ void DataGenerator::standardSink(){
       }
     }
     currentSample++;
-    std::cout << "Sending data " << currentSample << endl;
+    //std::cout << "DataGenerator: Sending data " << currentSample << endl;
     //Increments timeWindow
     if(currentSample == constants::NUMBER_OF_SAMPLES_IN_EACH_TIME_WINDOW )//1021 samples
     {
       currentTimeWindow++;
-      std::cout << "Current packetCounter: " << packetCounter << " window: " << currentTimeWindow << endl;
+      std::cout << "DataGenerator: Current packetCounter: " << packetCounter << " window: " << currentTimeWindow << endl;
       currentSample = 0;
     }
     wait((constants::DG_WAIT_TIME), SC_NS);
@@ -177,7 +177,7 @@ void DataGenerator::incrementingOccupancySink(){
 
 
     }
-    std::cout << "Sending data " << currentSample << " | data value: " << lastData <<  endl;
+    //std::cout << "DataGenerator: Sending data " << currentSample << " | data value: " << lastData <<  endl;
 
     currentSample++;
     if(currentSample == constants::NUMBER_OF_SAMPLES_IN_EACH_TIME_WINDOW )//1021 samples
@@ -185,8 +185,8 @@ void DataGenerator::incrementingOccupancySink(){
       occupancyPoints[currentTimeWindow - 1] = occupancy;
       if(currentTimeWindow % (constants::NUMBER_TIME_WINDOWS_TO_SIMULATE / constants::TIME_WINDOW_OCCUPANCY_SPLIT) == 0){
 
-        std::cout << "Occupancy: " << occupancy << endl;
-        std::cout << "Current packetCounter: " << packetCounter << " window: " << currentTimeWindow << endl;
+        std::cout << "DataGenerator: Occupancy: " << occupancy << endl;
+        std::cout << "DataGenerator: Current packetCounter: " << packetCounter << " window: " << currentTimeWindow << endl;
         occupancy = occupancy + constants::TIME_WINDOW_OCCUPANCY_SPLIT;
 
       }
@@ -224,7 +224,7 @@ int DataGenerator::generateCore(int portNumber, int currentTimeWindow, int packe
 */
 void DataGenerator::sendBlackEvents(){
 
-  std::cout << "Reading events into memory" << endl;
+  std::cout << "DataGenerator: Reading events into memory" << endl;
   Datamap dataMap = readBlackEvents(); //readBlackEvents();//readPileUpEvents();
   int counter = 0;
   std::cout << sc_time_stamp() << " Finished reading events into memory " << dataMap.size() << endl;
@@ -239,7 +239,7 @@ void DataGenerator::sendBlackEvents(){
         mit->second.pop_back();
         counter++;
       }
-      std::cout << "Progress: " << ((counter / (1021.0 * 32.0 * constants::NUMBER_TIME_WINDOWS_TO_SIMULATE)) * 100.0) << '\r';
+      std::cout << "DataGenerator: Progress: " << ((counter / (1021.0 * 32.0 * constants::NUMBER_TIME_WINDOWS_TO_SIMULATE)) * 100.0) << '\r';
       wait((constants::DG_WAIT_TIME), SC_NS);
     }
 
@@ -269,11 +269,11 @@ DataGenerator::Datamap DataGenerator::readBlackEvents(){
   int count = 0;
 
   if (!inputFile.good()) {
-    std::cerr << "can not open file " << constants::DATA_FILE << " for reading of real event data" << std::endl;
+    std::cerr << "DataGenerator: can not open file " << constants::DATA_FILE << " for reading of real event data" << std::endl;
     return map;
   }
 
-  std::cout << "reading event raw data from file " << constants::DATA_FILE << std::endl;
+  std::cout << "DataGenerator: reading event raw data from file " << constants::DATA_FILE << std::endl;
 
   //Read everything.
   while(!inputFile.eof()){
@@ -375,7 +375,7 @@ DataGenerator::Datamap DataGenerator::readEvents(){
   DataEntry entry;
   int sampleId = 0;
   if (!inputFile.good()) {
-    std::cerr << "can not open file " << constants::DATA_FILE << " for reading of real event data" << std::endl;
+    std::cerr << "DataGenerator: can not open file " << constants::DATA_FILE << " for reading of real event data" << std::endl;
     return map;
   }
 
@@ -461,7 +461,7 @@ DataGenerator::Datamap DataGenerator::readPileUpEvents(){
   std::vector<uint16_t> words;
 
   if (!inputFile.good()) {
-    std::cerr << "can not open file " << constants::DATA_FILE << " for reading of real event data" << std::endl;
+    std::cerr << "DataGenerator: can not open file " << constants::DATA_FILE << " for reading of real event data" << std::endl;
     return map;
   }
 
@@ -576,13 +576,13 @@ void DataGenerator::sendGaussianDistribution(){
       emptyCount = 0;
       sendSample = true;
     }
-    std::cout << "Sending data " << currentSample << '\r';
+    //std::cout << "DataGenerator: Sending data " << currentSample << '\r';
 
     //Increments timeWindow
     if(currentSample == constants::NUMBER_OF_SAMPLES_IN_EACH_TIME_WINDOW )//1021 samples
     {
       currentTimeWindow++;
-      std::cout << "Current packetCounter: " << packetCounter << " window: " << currentTimeWindow << " occupancy: " << currentOccupancy[index] << endl;
+      std::cout << "DataGenerator: Current packetCounter: " << packetCounter << " window: " << currentTimeWindow << " occupancy: " << currentOccupancy[index] << endl;
 
     index = randomGenerator.generate(0, constants::NUMBER_TIME_WINDOWS_TO_SIMULATE - 1);
 

@@ -68,7 +68,7 @@ void SAMPA::processData(int serialOut){
 				if(!header.overflow || header.numberOfSamples > 0){
 					int prev = 0;
 					if(channel->getAddr() == 4){
-						std::cout << "Number of samples in header: " << header.numberOfSamples << std::endl;
+						std::cout << "SAMPA: Number of samples in header: " << header.numberOfSamples << std::endl;
 					}
 					for(int j = 0; j < header.numberOfSamples; j++){
 						if(!channel->dataBuffer.empty()){
@@ -87,7 +87,7 @@ void SAMPA::processData(int serialOut){
 					}
 					//Statistics
 					if(channel->getAddr() == 4){
-						std::cout << "waittime: " << waitTime << std::endl;
+						std::cout << "SAMPA: waittime: " << waitTime << std::endl;
 					}
 					huffmanCompression[header.timeWindow - 1] += waitTime;
 				}
@@ -100,7 +100,7 @@ void SAMPA::processData(int serialOut){
 
 				porter_SAMPA_to_GBT[serialOut]->nb_write(header);
 				if(this->output){
-					std::cout << "timeWindow: " << header << " to serial: " << serialOut << endl;
+					std::cout << "SAMPA: timeWindow: " << header << " to serial: " << serialOut << endl;
 				}
 
 			}
