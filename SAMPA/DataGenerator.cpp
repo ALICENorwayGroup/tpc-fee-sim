@@ -268,6 +268,13 @@ DataGenerator::Datamap DataGenerator::readBlackEvents(){
   int timeFrame = 1;
   int count = 0;
 
+  if (!inputFile.good()) {
+    std::cerr << "can not open file " << constants::DATA_FILE << " for reading of real event data" << std::endl;
+    return map;
+  }
+
+  std::cout << "reading event raw data from file " << constants::DATA_FILE << std::endl;
+
   //Read everything.
   while(!inputFile.eof()){
 
@@ -367,6 +374,11 @@ DataGenerator::Datamap DataGenerator::readEvents(){
   Datamap map;
   DataEntry entry;
   int sampleId = 0;
+  if (!inputFile.good()) {
+    std::cerr << "can not open file " << constants::DATA_FILE << " for reading of real event data" << std::endl;
+    return map;
+  }
+
   int timeFrame = 1;
 	int hwAddr;
 	int i = 1021;
@@ -447,6 +459,12 @@ DataGenerator::Datamap DataGenerator::readPileUpEvents(){
   DataEntry entry;
   Huffman huffman;
   std::vector<uint16_t> words;
+
+  if (!inputFile.good()) {
+    std::cerr << "can not open file " << constants::DATA_FILE << " for reading of real event data" << std::endl;
+    return map;
+  }
+
   std::getline(inputFile, line);
 
   while(!inputFile.eof()){

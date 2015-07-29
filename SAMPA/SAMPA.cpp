@@ -42,8 +42,9 @@ void SAMPA::processData(int serialOut){
 	//Statistics
 	long currentLowestDataBuffer = constants::CHANNEL_DATA_BUFFER_SIZE;
 	long currentLowestHeaderBuffer = constants::CHANNEL_HEADER_BUFFER_SIZE;
-	Huffman huffman;
-	initCodeMap();
+	// TODO: make the Huffman processing optional
+	//Huffman huffman;
+	//initCodeMap();
 	for(int i = 0; i < constants::CHANNELS_PER_E_LINK; i++){
 		int channelId = i + (serialOut*constants::CHANNELS_PER_E_LINK);
 		Channel *channel = channels[channelId];

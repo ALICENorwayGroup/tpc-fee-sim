@@ -60,6 +60,10 @@ void Huffman::WriteCodesToFile(const char *filename, const HuffCodeMap& codes){
 void Huffman::CodesFromFile(const char *filename, HuffCodeMap& outCodes){
   std::ifstream is(filename);
   std::string line;
+  if (!is.good()) {
+    std::cerr << "can not open file " << filename << " for reading of Huffman code table" << std::endl;
+    return;
+  }
 
   while(!is.eof()){
     std::vector<bool> codes;
