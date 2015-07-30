@@ -25,6 +25,7 @@ ChannelMerger::ChannelMerger()
   , mChannelBaseline()
   , mChannelMappingPadrow()
   , mChannelMappingPad()
+  , mChannelOccupancy()
   , mZSThreshold(VOID_SIGNAL)
   , mBaselineshift(0)
   , mSignalOverflowCount(0)
@@ -172,6 +173,11 @@ int ChannelMerger::StartTimeframe()
   // initialize to VOID_SIGNAL value to indicate timebins without signals
   if (mUnderflowBuffer) memset(mUnderflowBuffer, 0xff, mBufferSize * sizeof(buffer_t));
   mSignalOverflowCount=0;
+
+  for (std::map<unsigned int, int>::iterator it=mChannelOccupancy.begin();
+       it != mChannelOccupancy.end(); it++) {
+    it->second=-1;
+  }
 
   return 0;
 }
@@ -585,7 +591,7 @@ int ChannelMerger::InitAltroMapping(const char* filename)
   return mChannelMappingPadrow.size();
 }
 
-int ChannelMerger::ApplyZeroSuppression()
+int ChannelMerger::CalculateZeroSuppression(bool bApply, bool bSetOccupancy)
 {
   unsigned threshold=mZSThreshold;
   if (threshold==VOID_SIGNAL) return 0;
@@ -603,6 +609,7 @@ int ChannelMerger::ApplyZeroSuppression()
     unsigned index=chit->first;
     unsigned position=chit->second;
     position*=mChannelLenght;
+    unsigned nFilledTimebins=0;
     bool bSignalPeak=false;
     for (int i=mChannelLenght-1; i>=0; i--) {
       unsigned currentSignal=mBuffer[position+i];
@@ -643,9 +650,16 @@ int ChannelMerger::ApplyZeroSuppression()
 	}
       }
 
-      if (mBuffer[position+i] != VOID_SIGNAL) {
+      if (bApply && mBuffer[position+i] != VOID_SIGNAL) {
 	mBuffer[position+i]=currentSignal;
       }
+      if (currentSignal != VOID_SIGNAL && mBuffer[position+i] != VOID_SIGNAL) {
+	nFilledTimebins++;
+      }
+    }
+
+    if (bSetOccupancy) {
+      mChannelOccupancy[index] = nFilledTimebins;
     }
   }
   return 0;
@@ -710,7 +724,7 @@ int ChannelMerger::WriteTimeframe(const char* filename)
   return 0;
 }
 
-int ChannelMerger::DoHuffmanCompression(AliHLTHuffman* pHuffman, bool bTrainingMode, TH2& hHuffmanFactor, TH1& hSignalDiff, unsigned symbolCutoffLength)
+int ChannelMerger::DoHuffmanCompression(AliHLTHuffman* pHuffman, bool bTrainingMode, TH2& hHuffmanFactor, TH1& hSignalDiff, TTree* huffmanstat, unsigned symbolCutoffLength)
 {
   // TODO: very quick solution to estimate potentisl of huffman compressions
   // to be implemented in a more modular fashion
@@ -718,25 +732,30 @@ int ChannelMerger::DoHuffmanCompression(AliHLTHuffman* pHuffman, bool bTrainingM
   int DDLNumber=-1;
   int HWAddr=-1;
   int PadRow=-2;
+  int NFilledTimebins=-1;
   Float_t HuffmanFactor=1.;
 
-  /*
-  if (huffmanstat.GetBranch("DDLNumber") != NULL) {
-    huffmanstat.SetBranchAddress("DDLNumber", &DDLNumber);
-  }
+  if (huffmanstat) {
+    if (huffmanstat->GetBranch("DDLNumber") != NULL) {
+      huffmanstat->SetBranchAddress("DDLNumber", &DDLNumber);
+    }
 
-  if (huffmanstat.GetBranch("HWAddr") != NULL) {
-    huffmanstat.SetBranchAddress("HWAddr", &HWAddr);
-  }
+    if (huffmanstat->GetBranch("HWAddr") != NULL) {
+      huffmanstat->SetBranchAddress("HWAddr", &HWAddr);
+    }
 
-  if (huffmanstat.GetBranch("PadRow") != NULL) {
-    huffmanstat.SetBranchAddress("PadRow", &PadRow);
-  }
+    if (huffmanstat->GetBranch("PadRow") != NULL) {
+      huffmanstat->SetBranchAddress("PadRow", &PadRow);
+    }
 
-  if (huffmanstat.GetBranch("HuffmanFactor") != NULL) {
-    huffmanstat.SetBranchAddress("HuffmanFactor", &HuffmanFactor);
+    if (huffmanstat->GetBranch("NFilledTimebins") != NULL) {
+      huffmanstat->SetBranchAddress("NFilledTimebins", &NFilledTimebins);
+    }
+
+    if (huffmanstat->GetBranch("HuffmanFactor") != NULL) {
+      huffmanstat->SetBranchAddress("HuffmanFactor", &HuffmanFactor);
+    }
   }
-  */
 
   for (std::map<unsigned int, unsigned int>::const_iterator chit=mChannelPositions.begin();
        chit!=mChannelPositions.end(); chit++) {
@@ -750,6 +769,12 @@ int ChannelMerger::DoHuffmanCompression(AliHLTHuffman* pHuffman, bool bTrainingM
     } else {
       PadRow=-1;
     }
+    if (mChannelOccupancy.find(index) != mChannelOccupancy.end()) {
+      NFilledTimebins = mChannelOccupancy[index];
+    } else {
+      NFilledTimebins = -1;
+    }
+
     HuffmanFactor=0.;
 
     // TODO: make this a property of the merger/data
@@ -798,10 +823,12 @@ int ChannelMerger::DoHuffmanCompression(AliHLTHuffman* pHuffman, bool bTrainingM
       bitcount+=(40-bitcount%40); // align to 40 bit altro format
       HuffmanFactor=mChannelLenght*signalBitLength;
       HuffmanFactor/=bitcount;
-      //huffmanstat.Fill();
+      if (huffmanstat) {
+	huffmanstat->Fill();
+      }
       hHuffmanFactor.Fill(PadRow, HuffmanFactor);
       if (HuffmanFactor<1.) {
-	std::cout << "HuffmanFactor " << HuffmanFactor << " bitcount " << bitcount << std::endl;
+	std::cout << "HuffmanFactor smaller than 1: " << HuffmanFactor << " bitcount " << bitcount << std::endl;
       }
       //assert(HuffmanFactor>=1.);
     }

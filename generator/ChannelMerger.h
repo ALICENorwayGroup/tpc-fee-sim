@@ -54,11 +54,27 @@ class ChannelMerger {
 
   int InitAltroMapping(const char* filename);
 
-  int ApplyZeroSuppression();
+  /**
+   * Calculate zeru suppression for all channels
+   * @param bApply         if true, result of ZS set to signal buffer
+   *                       if false, no changes to original buffer
+   * @param bSetOccupancy  if true, calculated occupancy set in map mChannelOccupancy
+   */
+  int CalculateZeroSuppression(bool bApply=true, bool bSetOccupancy=true);
+
+  /**
+   * Apply zero suppression to all channels
+   * This changes the signal buffer, ZS signal set to buffer
+   * Method is kept for backward compatibility after change of function name
+   * and parameter signature.
+   */
+  int ApplyZeroSuppression() {
+    return CalculateZeroSuppression(true, true);
+  }
 
   int WriteTimeframe(const char* filename);
 
-  int DoHuffmanCompression(AliHLTHuffman* pHuffman, bool bTrainingMode, TH2& hHuffmanFactor, TH1& hSignalDiff, unsigned symbolCutoffLength=0);
+  int DoHuffmanCompression(AliHLTHuffman* pHuffman, bool bTrainingMode, TH2& hHuffmanFactor, TH1& hSignalDiff, TTree* huffmanstat=NULL, unsigned symbolCutoffLength=0);
 
   int WriteSystemcInputFile(const char* filename);
 
@@ -96,6 +112,7 @@ class ChannelMerger {
   std::map<unsigned int, unsigned int> mChannelBaseline;
   std::map<unsigned int, unsigned int> mChannelMappingPadrow;
   std::map<unsigned int, unsigned int> mChannelMappingPad;
+  std::map<unsigned int, int> mChannelOccupancy;
   unsigned int mZSThreshold;
   int mBaselineshift;
   unsigned int mSignalOverflowCount;
