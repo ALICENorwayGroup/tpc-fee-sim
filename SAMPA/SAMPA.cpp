@@ -68,7 +68,7 @@ void SAMPA::processData(int serialOut){
 				if(!header.overflow || header.numberOfSamples > 0){
 					int prev = 0;
 					if(channel->getAddr() == 4){
-						std::cout << "SAMPA: Number of samples in header: " << header.numberOfSamples << std::endl;
+					  std::cout << std::endl << "SAMPA: Timewindow " << header.timeWindow << " Number of samples in header: " << header.numberOfSamples << " - SystemC time: " << sc_time_stamp() << std::endl;
 					}
 					for(int j = 0; j < header.numberOfSamples; j++){
 						if(!channel->dataBuffer.empty()){

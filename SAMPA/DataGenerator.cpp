@@ -1,5 +1,6 @@
 #include "DataGenerator.h"
 #include "Huffman.h"
+#include <ctime>
 /*
 * Generating samples
 * */
@@ -227,11 +228,18 @@ void DataGenerator::sendBlackEvents(){
   std::cout << "DataGenerator: Reading events into memory" << endl;
   Datamap dataMap = readBlackEvents(); //readBlackEvents();//readPileUpEvents();
   int counter = 0;
-  std::cout << sc_time_stamp() << " Finished reading events into memory " << dataMap.size() << endl;
-  for(int j = 0; j < constants::NUMBER_TIME_WINDOWS_TO_SIMULATE / dataMap.size(); j++){
+  int logcounter = 0;
+  const int logperiod = constants::SAMPA_NUMBER_INPUT_PORTS * 1000;
+  std::cout << sc_time_stamp() << " Finished reading events into memory: " << dataMap.size() << endl;
+
+  int nLoops=0;
+  if (dataMap.size() > 0)
+    nLoops=constants::NUMBER_TIME_WINDOWS_TO_SIMULATE / dataMap.size();
+
+  for(int j = 0; j < nLoops; j++){
   for(std::vector< DataEntry >::iterator it = dataMap.begin(); it != dataMap.end(); ++it){
 
-    for(int i = 0; i < 1021; i++){
+    for(int i = 0; i < constants::NUMBER_OF_SAMPLES_IN_EACH_TIME_WINDOW; i++){
       for(std::map<int, std::list<Sample>>::iterator mit = it->begin(); mit != it->end(); ++mit){
         int channel = mit->first;
         //Reverse iterator through list
@@ -239,13 +247,23 @@ void DataGenerator::sendBlackEvents(){
         mit->second.pop_back();
         counter++;
       }
-      std::cout << "DataGenerator: Progress: " << ((counter / (1021.0 * 32.0 * constants::NUMBER_TIME_WINDOWS_TO_SIMULATE)) * 100.0) << '\r';
+      if (counter<logcounter + logperiod) {
+	std::cout << "DataGenerator: Progress: " << ((counter * 100.0 / (constants::NUMBER_OF_SAMPLES_IN_EACH_TIME_WINDOW * constants::SAMPA_NUMBER_INPUT_PORTS * constants::NUMBER_TIME_WINDOWS_TO_SIMULATE))) << "% - SystemC time: " << sc_time_stamp() << "        " << '\r';
+      } else {
+	logcounter=counter;
+	time_t now;
+	time(&now);
+	std::cout << "DataGenerator: Progress: " << ((counter * 100.0 / (constants::NUMBER_OF_SAMPLES_IN_EACH_TIME_WINDOW * constants::SAMPA_NUMBER_INPUT_PORTS * constants::NUMBER_TIME_WINDOWS_TO_SIMULATE))) << "% " << ctime(&now);
+      }
       wait((constants::DG_WAIT_TIME), SC_NS);
     }
 
 
   }
 }
+time_t now;
+time(&now);
+std::cout << "DataGenerator: Finished - SystemC time: " << sc_time_stamp() << " " << ctime(&now);
 }
 /*
 Filinfo:
@@ -267,6 +285,7 @@ DataGenerator::Datamap DataGenerator::readBlackEvents(){
   int sampleId = 0;
   int timeFrame = 1;
   int count = 0;
+  int nChannels = 0;
 
   if (!inputFile.good()) {
     std::cerr << "DataGenerator: can not open file " << constants::DATA_FILE << " for reading of real event data" << std::endl;
@@ -302,6 +321,8 @@ DataGenerator::Datamap DataGenerator::readBlackEvents(){
     startTime = std::stoi(line.substr(0, line.find(" ")));
     samplePrefix = constants::NUMBER_OF_SAMPLES_IN_EACH_TIME_WINDOW - startTime;
     samplePostfix = startTime - nrOfSamples;
+
+    //std::cout << "HW=" << hwAddr << ": " << startTime << " " << nrOfSamples << std::endl;
 
     uint16_t prev = 0;
     //Empty samples in the front.
@@ -345,6 +366,7 @@ DataGenerator::Datamap DataGenerator::readBlackEvents(){
     //Insert entire timeframe for 1 channel.
     entry.insert(std::pair<int, std::list<Sample>>(count, list));
     count++;
+    nChannels++;
 
     //When number of channels is reached, start new timeframe.
     if(count == constants::SAMPA_NUMBER_INPUT_PORTS * constants::NUMBER_OF_SAMPA_CHIPS){
@@ -361,6 +383,8 @@ DataGenerator::Datamap DataGenerator::readBlackEvents(){
 HuffCodeMap codes;
 huffman.CreateTree(words, codes);
 huffman.WriteCodesToFile(constants::HUFFMAN_TREE_FILE_NAME, codes);
+
+ std::cout << nChannels << " channel(s) read" << std::endl;
 
 return map;
 }
