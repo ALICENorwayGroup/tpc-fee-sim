@@ -60,6 +60,8 @@ class ChannelMerger {
 
   int DoHuffmanCompression(AliHLTHuffman* pHuffman, bool bTrainingMode, TH2& hHuffmanFactor, TH1& hSignalDiff, unsigned symbolCutoffLength=0);
 
+  int WriteSystemcInputFile(const char* filename);
+
  protected:
 
  private:

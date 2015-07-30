@@ -809,3 +809,61 @@ int ChannelMerger::DoHuffmanCompression(AliHLTHuffman* pHuffman, bool bTrainingM
 
   return 0;
 }
+
+int ChannelMerger::WriteSystemcInputFile(const char* filename)
+{
+  // write the channel data in the input format of the SAMPA systemC
+  // simulation
+  // Format: for each channel
+  //   hw=<hwaddr>
+  //   <starttime> <bunchlength>
+  //   <time> <signal>
+  //   ....
+  //
+  // The input method is implemented in DataGenerator::readBlackEvents
+  // Note: Currently, this method can only read one bunch per channel
+  // TODO: this function can probably be merged with WriteTimeframe
+  int DDLNumber=-1;
+  int HWAddr=-1;
+  int PadRow=-2;
+
+  if (!filename) return -1;
+  std::ofstream ofile(filename);
+  if (!ofile.good()) {
+    return -1;
+  }
+
+  for (std::map<unsigned int, unsigned int>::const_iterator chit=mChannelPositions.begin();
+       chit!=mChannelPositions.end(); chit++) {
+    unsigned index=chit->first;
+    unsigned position=chit->second;
+    position*=mChannelLenght;
+    DDLNumber=(index&0xffff0000)>>16;
+    HWAddr=index&0x0000ffff;
+    ofile << "hw=" << HWAddr << std::endl;
+    if (mChannelMappingPadrow.find(index) != mChannelMappingPadrow.end()) {
+      PadRow=mChannelMappingPadrow[index];
+    } else {
+      PadRow=-1;
+    }
+    // TODO: these values correspond to the numbers in the systemc SAMPA
+    // simulation. Make them configurable.
+    unsigned startTime=1021;
+    unsigned bunchLength=980;
+    assert(startTime>bunchLength);
+    unsigned lowerBound=startTime-bunchLength;
+    ofile << startTime << " " << bunchLength << std::endl;
+    for (unsigned i=startTime; i>lowerBound; --i) {
+      unsigned signal=mBuffer[position+i];
+      if (signal == VOID_SIGNAL) {
+	// write all timebins to create one bunch
+	signal=0;
+      }
+      ofile << i << " " << signal << std::endl;
+    }
+  }
+
+  ofile.close();
+
+  return 0;
+}
