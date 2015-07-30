@@ -78,6 +78,19 @@ class ChannelMerger {
 
   int WriteSystemcInputFile(const char* filename);
 
+  /**
+   * Apply the common mode effect.
+   * The effct is an intrinsic feature of the detector readout
+   * pad plane. The charge in all pads is coupled, the signals in
+   * every channel induce a negative signal in all other channels
+   * scaled by the number of pads.
+   * Its believed that this method is just a rough simplification
+   * but should be enough for estimation of data rates.
+   * @param scalingFactor  scaling factor to be applied, number of
+   *                       available channels is used if -1
+   */
+  int ApplyCommonModeEffect(int scalingFactor = -1);
+
  protected:
 
  private:

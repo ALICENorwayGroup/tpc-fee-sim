@@ -894,3 +894,46 @@ int ChannelMerger::WriteSystemcInputFile(const char* filename)
 
   return 0;
 }
+
+int ChannelMerger::ApplyCommonModeEffect(int scalingFactor)
+{
+  std::vector<unsigned int> cmSignal(mChannelLenght, 0);
+  // 1. loop over all channels and sum the signals in each timebin
+  for (std::map<unsigned int, unsigned int>::const_iterator chit=mChannelPositions.begin();
+       chit!=mChannelPositions.end(); chit++) {
+    unsigned index=chit->first;
+    unsigned position=chit->second;
+    position*=mChannelLenght;
+    for (unsigned i=0; i<mChannelLenght; ++i) {
+      cmSignal[i]+=mBuffer[position+i];
+    }
+  }
+
+  if (scalingFactor<0) scalingFactor=mChannelPositions.size();
+
+  // 2. subtract scaled (sum - current channel) from current channel
+  unsigned nUnderflow=0;
+  unsigned nUnderflowChannels=0;
+  for (std::map<unsigned int, unsigned int>::const_iterator chit=mChannelPositions.begin();
+       chit!=mChannelPositions.end(); chit++) {
+    unsigned index=chit->first;
+    unsigned position=chit->second;
+    position*=mChannelLenght;
+    bool bHaveUnderflow=false;
+    for (unsigned i=0; i<mChannelLenght; ++i) {
+      unsigned int cmImpact=cmSignal[i] - mBuffer[position+i];
+      cmImpact/=scalingFactor;
+      if (mBuffer[position + i] < cmImpact) {
+	mBuffer[position + i] = 0;
+	nUnderflow++;
+	if (!bHaveUnderflow) nUnderflowChannels++;
+	bHaveUnderflow;
+      } else {
+	mBuffer[position + i] -= cmImpact;
+      }
+    }
+  }
+  std::cout << "ApplyCommonModeEffect: " << nUnderflow << " underflow(s) in " << nUnderflowChannels << " channel(s)" << std::endl;
+
+  return 0;
+}
