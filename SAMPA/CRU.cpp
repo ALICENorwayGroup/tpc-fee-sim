@@ -72,6 +72,10 @@ void CRU::sendOutput(void) {
 
 	while(true)//packetsReceived < constants::NUMBER_OF_PACKETS_TO_SEND)
 	{	
+	  /* the call to empty of the map in the loop below is responsible for
+             roughly 30% of the load. It's commented out for the moment to speed up
+             the simulation. This simulation anyhow has focus on SAMPA. Later, the
+             two projects for SAMPA and CRU have to be combined.
 		for(int outputlinks = 0; outputlinks < 8; outputlinks++)
 		{
 			if(!input_fifos[currentFifoNumber].empty()) //ellers timeout, men det må diskuteres...
@@ -106,6 +110,7 @@ void CRU::sendOutput(void) {
 			}
 			//wait(constants::CRU_WAIT_TIME, SC_NS);
 		}
+	  */
 		wait(1, SC_PS);//beregne nøyaktig
 	}
 }
