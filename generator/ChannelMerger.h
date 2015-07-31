@@ -55,6 +55,13 @@ class ChannelMerger {
   int InitAltroMapping(const char* filename);
 
   /**
+   * Get threshold used for zero suppression
+   *
+   * Takes account for initialized threshold and baselineshift.
+   */
+  unsigned GetThreshold() const;
+
+  /**
    * Calculate zeru suppression for all channels
    * @param bApply         if true, result of ZS set to signal buffer
    *                       if false, no changes to original buffer

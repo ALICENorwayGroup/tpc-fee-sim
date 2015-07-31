@@ -591,10 +591,10 @@ int ChannelMerger::InitAltroMapping(const char* filename)
   return mChannelMappingPadrow.size();
 }
 
-int ChannelMerger::CalculateZeroSuppression(bool bApply, bool bSetOccupancy)
+unsigned ChannelMerger::GetThreshold() const
 {
   unsigned threshold=mZSThreshold;
-  if (threshold==VOID_SIGNAL) return 0;
+  if (threshold==VOID_SIGNAL) return threshold;
 
   if (mBaselineshift<0) {
     threshold+=-mBaselineshift;
@@ -603,6 +603,14 @@ int ChannelMerger::CalculateZeroSuppression(bool bApply, bool bSetOccupancy)
   } else {
     threshold-=mBaselineshift;
   }
+
+  return threshold;
+}
+
+int ChannelMerger::CalculateZeroSuppression(bool bApply, bool bSetOccupancy)
+{
+  unsigned threshold=GetThreshold();
+  if (threshold==VOID_SIGNAL) return 0;
 
   for (std::map<unsigned int, unsigned int>::const_iterator chit=mChannelPositions.begin();
        chit!=mChannelPositions.end(); chit++) {
@@ -911,15 +919,21 @@ int ChannelMerger::WriteSystemcInputFile(const char* filename)
 
 int ChannelMerger::ApplyCommonModeEffect(int scalingFactor)
 {
-  std::vector<unsigned int> cmSignal(mChannelLenght, 0);
-  // 1. loop over all channels and sum the signals in each timebin
+  // buffer for sum of ZS signals of all channels
+  std::vector<buffer_t> cmSignal(mChannelLenght, 0);
+  // temporary buffer for calculation of ZS for one channel
+  std::vector<buffer_t> zsSignal(mChannelLenght, 0);
+  // 1. loop over all channels and sum ZS signals in each timebin
   for (std::map<unsigned int, unsigned int>::const_iterator chit=mChannelPositions.begin();
        chit!=mChannelPositions.end(); chit++) {
     unsigned index=chit->first;
     unsigned position=chit->second;
     position*=mChannelLenght;
+    buffer_t* signalBuffer=mBuffer+position;
+    int result=SignalBufferZeroSuppression(signalBuffer, mChannelLenght, GetThreshold(), mBaselineshift, &zsSignal[0]);
     for (unsigned i=0; i<mChannelLenght; ++i) {
-      cmSignal[i]+=mBuffer[position+i];
+      if (zsSignal[i] == VOID_SIGNAL) continue;
+      cmSignal[i]+=zsSignal[i];
     }
   }
 
@@ -934,20 +948,29 @@ int ChannelMerger::ApplyCommonModeEffect(int scalingFactor)
     unsigned position=chit->second;
     position*=mChannelLenght;
     bool bHaveUnderflow=false;
+    buffer_t* signalBuffer=mBuffer+position;
+    int result=SignalBufferZeroSuppression(signalBuffer, mChannelLenght, GetThreshold(), mBaselineshift, &zsSignal[0]);
     for (unsigned i=0; i<mChannelLenght; ++i) {
-      unsigned int cmImpact=cmSignal[i] - mBuffer[position+i];
+      unsigned int cmImpact=cmSignal[i];
+      if (zsSignal[i] != VOID_SIGNAL) {
+	if (cmImpact > zsSignal[i]) {
+	  cmImpact -= zsSignal[i];
+	} else {
+	  cmImpact = 0;
+	}
+      }
       cmImpact/=scalingFactor;
       if (mBuffer[position + i] < cmImpact) {
 	mBuffer[position + i] = 0;
 	nUnderflow++;
 	if (!bHaveUnderflow) nUnderflowChannels++;
-	bHaveUnderflow;
+	bHaveUnderflow = true;
       } else {
 	mBuffer[position + i] -= cmImpact;
       }
     }
   }
-  std::cout << "ApplyCommonModeEffect: " << nUnderflow << " underflow(s) in " << nUnderflowChannels << " channel(s)" << std::endl;
+  std::cout << "ApplyCommonModeEffect: scaling " << scalingFactor << "; " << nUnderflow << " underflow(s) in " << nUnderflowChannels << " channel(s)" << std::endl;
 
   return 0;
 }
