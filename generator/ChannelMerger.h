@@ -114,6 +114,21 @@ class ChannelMerger {
    */
   int AddChannel(float offset, unsigned int index, AliAltroRawStreamV3& stream);
 
+  /**
+   * Zero suppression for one signal buffer
+   *
+   * Method does not directly change any members but works on an array of signals.
+   * the corrected values can either be applied to the array or not, the occupancy
+   * (number of filled timebins) is returned.
+   * @param buffer        pointer to signal buffer
+   * @param size          number of signals
+   * @param threshold     ZS threshold in ADC counts
+   * @param baselineshift baselineshift in ADC counts
+   * @param target        target buffer for ZS corrected value, optional, can be equal
+   *                      to original signal buffer
+   */
+  int SignalBufferZeroSuppression(buffer_t* buffer, unsigned size, unsigned threshold, int baselineshift, buffer_t* target=NULL) const;
+
   int InitNextInput(std::istream& inputfiles);
 
   unsigned mChannelLenght;

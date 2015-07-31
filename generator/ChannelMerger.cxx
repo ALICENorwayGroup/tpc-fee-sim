@@ -609,23 +609,36 @@ int ChannelMerger::CalculateZeroSuppression(bool bApply, bool bSetOccupancy)
     unsigned index=chit->first;
     unsigned position=chit->second;
     position*=mChannelLenght;
+    buffer_t* signalBuffer=mBuffer+position;
+    int result=SignalBufferZeroSuppression(signalBuffer, mChannelLenght, threshold, mBaselineshift, bApply?signalBuffer:NULL);
+    if (result>=0 && bSetOccupancy) {
+      mChannelOccupancy[index] = result;
+    }
+  }
+  return 0;
+}
+
+int ChannelMerger::SignalBufferZeroSuppression(ChannelMerger::buffer_t* buffer, unsigned size, unsigned threshold, int baselineshift, buffer_t* target) const
+{
+  {// additional scope to keep formatting
+    if (!buffer) return -1;
     unsigned nFilledTimebins=0;
     bool bSignalPeak=false;
-    for (int i=mChannelLenght-1; i>=0; i--) {
-      unsigned currentSignal=mBuffer[position+i];
+    for (int i=size-1; i>=0; i--) {
+      unsigned currentSignal=buffer[i];
       if (currentSignal == VOID_SIGNAL) {
 	currentSignal=0;
       }
 
       if (!bSignalPeak && currentSignal>threshold &&
-	  i>=1 && mBuffer[position+i-1]>threshold && mBuffer[position+i-1]!=VOID_SIGNAL) {
+	  i>=1 && buffer[i-1]>threshold && buffer[i-1]!=VOID_SIGNAL) {
 	// signal peak starts at two consecutive signals over threshold
 	bSignalPeak=true;
       } else if (bSignalPeak && currentSignal>threshold) {
 	// signal belonging to active signal peak
       } else if (bSignalPeak && currentSignal<=threshold) {
-	if (i>=1 && mBuffer[position+i-1] != VOID_SIGNAL && mBuffer[position+i-1]>threshold ||
-	    i>=2 && mBuffer[position+i-1] != VOID_SIGNAL && mBuffer[position+i-2] != VOID_SIGNAL && mBuffer[position+i-2]>threshold) {
+	if (i>=1 && buffer[i-1] != VOID_SIGNAL && buffer[i-1]>threshold ||
+	    i>=2 && buffer[i-1] != VOID_SIGNAL && buffer[i-2] != VOID_SIGNAL && buffer[i-2]>threshold) {
 	  // signal below threshold after peak, merged if next or
 	  // next to next signal over threshold
 	  // two signal peaks intercepted by one or two consecutive
@@ -641,28 +654,29 @@ int ChannelMerger::CalculateZeroSuppression(bool bApply, bool bSetOccupancy)
       }
 
       if (currentSignal != VOID_SIGNAL) {
-	if (mBaselineshift<0) {
-	  if ((int)currentSignal>-mBaselineshift) currentSignal-=-mBaselineshift;
+	if (baselineshift<0) {
+	  if ((int)currentSignal>-baselineshift) currentSignal-=-baselineshift;
 	  else currentSignal=0;
 	} else {
 	  // TODO: not sure if this makes sense
-	  currentSignal+=mBaselineshift;
+	  currentSignal+=baselineshift;
 	}
       }
 
-      if (bApply && mBuffer[position+i] != VOID_SIGNAL) {
-	mBuffer[position+i]=currentSignal;
+      if (target) {
+	if (buffer[i] != VOID_SIGNAL) {
+	  target[i] = currentSignal;
+	} else {
+	  target[i] = VOID_SIGNAL;
+	}
       }
-      if (currentSignal != VOID_SIGNAL && mBuffer[position+i] != VOID_SIGNAL) {
+      if (currentSignal != VOID_SIGNAL && buffer[i] != VOID_SIGNAL) {
 	nFilledTimebins++;
       }
     }
 
-    if (bSetOccupancy) {
-      mChannelOccupancy[index] = nFilledTimebins;
-    }
+    return nFilledTimebins;
   }
-  return 0;
 }
 
 int ChannelMerger::WriteTimeframe(const char* filename)
