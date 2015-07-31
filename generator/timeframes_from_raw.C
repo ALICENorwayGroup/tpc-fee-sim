@@ -138,14 +138,15 @@ void timeframes_from_raw()
 
   TTree *huffmanstat=NULL;
 
-  if (0)
+  if (g_doHuffmanCompression>0)
     huffmanstat=new TTree("huffmanstat","TPC RAW huffman compression statistics");
 
   if (huffmanstat) {
-    // huffmanstat->Branch("TimeFrameNo"    , &TimeFrameNo     , "TimeFrameNo/I");
-    // huffmanstat->Branch("DDLNumber"      , &DDLNumber       , "DDLNumber/I");
-    // huffmanstat->Branch("HWAddr"         , &HWAddr          , "HWAddr/I");
-    // huffmanstat->Branch("PadRow"         , &PadRow          , "PadRow/I");
+    huffmanstat->Branch("TimeFrameNo"    , &TimeFrameNo     , "TimeFrameNo/I");
+    huffmanstat->Branch("DDLNumber"      , &DDLNumber       , "DDLNumber/I");
+    huffmanstat->Branch("HWAddr"         , &HWAddr          , "HWAddr/I");
+    huffmanstat->Branch("PadRow"         , &PadRow          , "PadRow/I");
+    huffmanstat->Branch("NFilledTimebins", &NFilledTimebins , "NFilledTimebins/I");
     huffmanstat->Branch("HuffmanFactor"  , &HuffmanFactor   , "HuffmanFactor/F");
   }
 
@@ -229,11 +230,11 @@ void timeframes_from_raw()
     // normalization for estimation of baseline
     // not to be used for colision pileup in timeframes
     //merger.Normalize(NCollisions);
-    if (g_doHuffmanCompression==0) {
-      merger.ApplyZeroSuppression();
-      merger.Analyze(*channelstat);
-    } else {
-      merger.DoHuffmanCompression(pHuffman, g_doHuffmanCompression==2, *hHuffmanFactor, *hSignalDiff);
+    merger.CalculateZeroSuppression(g_doHuffmanCompression==0);
+    //merger.ApplyCommonModeEffect();
+    merger.Analyze(*channelstat);
+    if (g_doHuffmanCompression>0) {
+      merger.DoHuffmanCompression(pHuffman, g_doHuffmanCompression==2, *hHuffmanFactor, *hSignalDiff, huffmanstat);
     }
     if (merger.GetSignalOverflowCount() > 0) {
       std::cout << "signal overflow in current timeframe detected" << std::endl;
