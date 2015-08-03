@@ -34,11 +34,18 @@
 #include "TSystem.h"
 #include "AliHLTHuffman.h"
 
+// configuration section
 const float g_rate=5.;    // rate with respect to unit time, i.e. framesize
 const int   g_nframes=1000;    // number of timeframes to be generated
+const int   g_baseline=5; // place baseline at n ADC counts after pedestal subtraction
+const int   g_thresholdZS=2; // threshold for zero suppression, this requires the pedestal configuration to make sense
 const int   g_doHuffmanCompression=0; // 0 - off, 1 - compression, 2 - training
+const int   g_applyCommonModeEffect=0; // 0 - off, 1 = on
+const char* g_confFilenames="datafiles.txt";
 const char* g_huffmanFileName="TPCRawSignalDifference";
 const char* g_targetFileName="tpc-raw-channel-stat.root";
+const int   ddlrange[2]={0, 1}; // range of DDLs to be read, use {-1, -1} for all
+const int   padrowrange[2]={-1, -1}; // range of padrows, use {-1, -1} to disable selection, Note: this requires the mapping file for channels
 
 void timeframes_from_raw()
 {
@@ -74,17 +81,23 @@ void timeframes_from_raw()
 
   GeneratorTF generator(g_rate);
   ChannelMerger merger;
-  merger.SetDDLRange(0, 1);
-  merger.SetPadRowRange(0, 10);
-  merger.InitChannelBaseline("pedestal.dat", -5);
+  if (ddlrange[0]>=0 && ddlrange[1]>=0)
+    merger.SetDDLRange(ddlrange[0], ddlrange[1]);
+  if (padrowrange[0]>=0 && padrowrange[1]>=0)
+    merger.SetPadRowRange(padrowrange[0], padrowrange[1]);
+  merger.InitChannelBaseline("pedestal.dat", -g_baseline); // note the '-'!
   merger.InitAltroMapping("mapping.dat");
-  merger.InitZeroSuppression(2);
+  merger.InitZeroSuppression(g_thresholdZS);
   bool bHaveSignalOverflow=false;
 
   std::istream* inputfiles=&std::cin;
-  std::ifstream inputconfiguration("datafiles.txt");
+  std::ifstream inputconfiguration(g_confFilenames);
   if (inputconfiguration.good()) {
     inputfiles=&inputconfiguration;
+  } else {
+    std::cout << "Can not open configuration file '" << g_confFilenames << "' " << std::endl
+	      << "Reading input file names from std input, one filename per line, " << std::endl
+	      << "Abort the macro if nothing is provided to std input !!!" << std::endl;
   }
 
   // statistics analysis
@@ -231,7 +244,8 @@ void timeframes_from_raw()
     // not to be used for colision pileup in timeframes
     //merger.Normalize(NCollisions);
     merger.CalculateZeroSuppression(g_doHuffmanCompression==0);
-    //merger.ApplyCommonModeEffect();
+    if (g_applyCommonModeEffect>0)
+      merger.ApplyCommonModeEffect();
     merger.Analyze(*channelstat);
     if (g_doHuffmanCompression>0) {
       merger.DoHuffmanCompression(pHuffman, g_doHuffmanCompression==2, *hHuffmanFactor, *hSignalDiff, huffmanstat);
