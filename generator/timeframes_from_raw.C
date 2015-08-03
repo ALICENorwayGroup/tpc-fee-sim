@@ -76,7 +76,9 @@ void timeframes_from_raw()
       cout << "can not load Huffman decoder object " << huffmanDecoderName << " from file " << htfn << endl;
       return;
     }
-    pHuffman=(AliHLTHuffman*)obj;
+    pHuffman=(AliHLTHuffman*)obj->Clone();
+    htf->Close();
+    delete htf;
   }
 
   GeneratorTF generator(g_rate);
