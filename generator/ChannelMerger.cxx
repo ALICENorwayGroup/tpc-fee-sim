@@ -11,6 +11,7 @@
 #include <iomanip>
 #include <assert.h>
 #include <fstream>
+#include <cstdlib>
 
 const ChannelMerger::buffer_t VOID_SIGNAL=~(ChannelMerger::buffer_t)(0);
 const ChannelMerger::buffer_t MAX_ACCUMULATED_SIGNAL=VOID_SIGNAL-1;
@@ -36,6 +37,7 @@ ChannelMerger::ChannelMerger()
   , mChannelHistograms(new TFolder("ChannelHistograms", "ChannelHistograms"))
   , mMinPadRow(-1)
   , mMaxPadRow(-1)
+  , mNoiseFactor(0)
 {
   if (mChannelHistograms) mChannelHistograms->IsOwner();
 }
@@ -284,7 +286,12 @@ int ChannelMerger::AddChannel(float offset, unsigned int index, AliAltroRawStrea
       if (timebin < (int)mChannelLenght && timebin >= 0) {
 	if (mBuffer[position+timebin] == VOID_SIGNAL) {
 	  // first value in this timebin
-	  mBuffer[position+timebin]=originalSignal;
+	  if (currentSignal==0 && mNoiseFactor >= 1) {
+	    // this value is noise base line
+	    mBuffer[position+timebin]=ManipulateNoise(originalSignal);
+	  } else {
+	    mBuffer[position+timebin]=originalSignal;
+	  }
 	} else if (mBuffer[position+timebin] > MAX_ACCUMULATED_SIGNAL-currentSignal) {
 	  // range overflow
 	  assert(0); // stop here or count errors if assert disabled (NDEBUG)
@@ -304,7 +311,12 @@ int ChannelMerger::AddChannel(float offset, unsigned int index, AliAltroRawStrea
 	timebin += mChannelLenght;
 	if (mUnderflowBuffer[position+timebin] == VOID_SIGNAL) {
 	  // first value in this timebin
-	  mUnderflowBuffer[position+timebin]=originalSignal;
+	  if (currentSignal==0 && mNoiseFactor >= 1) {
+	    // this value is noise base line
+	    mUnderflowBuffer[position+timebin]=ManipulateNoise(originalSignal);
+	  } else {
+	    mUnderflowBuffer[position+timebin]=originalSignal;
+	  }
 	} else if (mUnderflowBuffer[position+timebin] > MAX_ACCUMULATED_SIGNAL-currentSignal) {
 	  // range overflow
 	  mUnderflowBuffer[position+timebin] = MAX_ACCUMULATED_SIGNAL;
@@ -973,4 +985,19 @@ int ChannelMerger::ApplyCommonModeEffect(int scalingFactor)
   std::cout << "ApplyCommonModeEffect: scaling " << scalingFactor << "; " << nUnderflow << " underflow(s) in " << nUnderflowChannels << " channel(s)" << std::endl;
 
   return 0;
+}
+
+unsigned ChannelMerger::ManipulateNoise(unsigned signal) const
+{
+  // manipulate a noise signal by applying a factor and
+  // add a randomized adc count in the range of the factor
+  // this requires the pedestal to be subtracted.
+  unsigned factor = mNoiseFactor;
+  unsigned noisesignal=signal;
+  if (factor <= 1) return signal;
+  noisesignal *= factor;
+  noisesignal += std::rand() % factor;
+  if (mBaselineshift<0 && noisesignal >= -mBaselineshift * (factor - 1))
+    noisesignal -= -mBaselineshift * (factor - 1);
+  return noisesignal;
 }

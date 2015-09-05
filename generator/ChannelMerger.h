@@ -54,6 +54,8 @@ class ChannelMerger {
 
   int InitAltroMapping(const char* filename);
 
+  void InitNoiseManipulation(unsigned factor) {mNoiseFactor = factor; }
+
   /**
    * Get threshold used for zero suppression
    *
@@ -97,6 +99,15 @@ class ChannelMerger {
    *                       available channels is used if -1
    */
   int ApplyCommonModeEffect(int scalingFactor = -1);
+
+  /**
+   * Manipulate the noise signal
+   * When adding the channel, a factor is applied to all noise signals
+   * and a randomized adc count in the range of the is factor added.
+   * This requires the pedestal to be subtracted,
+   * Real signals are not changed by the algorithm
+   */
+  unsigned ManipulateNoise(unsigned signal) const;
 
  protected:
 
@@ -161,6 +172,7 @@ class ChannelMerger {
   int mInputStreamMaxDDL;
   int mMinPadRow;
   int mMaxPadRow;
+  unsigned mNoiseFactor;
 
   TFolder* mChannelHistograms;
 };
