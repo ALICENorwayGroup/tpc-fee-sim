@@ -39,7 +39,9 @@ const float g_rate=5.;    // rate with respect to unit time, i.e. framesize
 const int   g_nframes=1000;    // number of timeframes to be generated
 const int   g_baseline=5; // place baseline at n ADC counts after pedestal subtraction
 const int   g_thresholdZS=2; // threshold for zero suppression, this requires the pedestal configuration to make sense
+const int   g_noiseFactor=1; // manipulation of the noise, roughly multiplying by factor
 const int   g_doHuffmanCompression=0; // 0 - off, 1 - compression, 2 - training
+const int   g_huffmanLengthCutoff=0; // 0 - off, >0 symbols with lenght >= cutoff are stored with a marker of length cutoff and the original value
 const int   g_applyCommonModeEffect=0; // 0 - off, 1 = on
 const char* g_confFilenames="datafiles.txt";
 const char* g_huffmanFileName="TPCRawSignalDifference";
@@ -90,6 +92,7 @@ void timeframes_from_raw()
   merger.InitChannelBaseline("pedestal.dat", -g_baseline); // note the '-'!
   merger.InitAltroMapping("mapping.dat");
   merger.InitZeroSuppression(g_thresholdZS);
+  merger.InitNoiseManipulation(g_noiseFactor);
   bool bHaveSignalOverflow=false;
 
   std::istream* inputfiles=&std::cin;
@@ -250,7 +253,7 @@ void timeframes_from_raw()
       merger.ApplyCommonModeEffect();
     merger.Analyze(*channelstat);
     if (g_doHuffmanCompression>0) {
-      merger.DoHuffmanCompression(pHuffman, g_doHuffmanCompression==2, *hHuffmanFactor, *hSignalDiff, huffmanstat);
+      merger.DoHuffmanCompression(pHuffman, g_doHuffmanCompression==2, *hHuffmanFactor, *hSignalDiff, huffmanstat, g_huffmanLengthCutoff);
     }
     if (merger.GetSignalOverflowCount() > 0) {
       std::cout << "signal overflow in current timeframe detected" << std::endl;
