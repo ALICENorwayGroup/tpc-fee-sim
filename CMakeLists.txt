@@ -14,6 +14,12 @@ set(LIBRARY_OUTPUT_PATH "${CMAKE_BINARY_DIR}/lib")
 set(EXECUTABLE_OUTPUT_PATH "${CMAKE_BINARY_DIR}/bin")
 set(INCLUDE_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/include")
 
+# Path to additonal modules
+set(CMAKE_MODULE_PATH "${AliceTPC-FEE-simulation_SOURCE_DIR}/cmake")
+
+# AliRoot Core mandatory
+find_package(AliRoot)
+
 # Check if the user attempts to build the project in the source
 # directory
 #CHECK_OUT_OF_SOURCE_BUILD()
