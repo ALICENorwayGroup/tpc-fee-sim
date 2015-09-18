@@ -1,3 +1,20 @@
+//****************************************************************************
+//* This file is free software: you can redistribute it and/or modify        *
+//* it under the terms of the GNU General Public License as published by     *
+//* the Free Software Foundation, either version 3 of the License, or	     *
+//* (at your option) any later version.					     *
+//*                                                                          *
+//* Primary Authors: Matthias Richter <richterm@scieq.net>                   *
+//*                                                                          *
+//* The authors make no claims about the suitability of this software for    *
+//* any purpose. It is provided "as is" without express or implied warranty. *
+//****************************************************************************
+
+//  @file   ChannelMerger.cxx
+//  @author Matthias Richter
+//  @since  2015-07-10
+//  @brief  Various functionality for merging of TPC raw data
+
 #include "ChannelMerger.h"
 #include "AliAltroRawStreamV3.h"
 #include "AliRawReader.h"
@@ -106,9 +123,9 @@ int ChannelMerger::MergeCollisions(std::vector<float> collisiontimes, std::istre
   return iMergedCollisions;
 }
 
-int ChannelMerger::InitNextInput(std::istream& inputfiles)
+int ChannelMerger::InitNextInputFile(std::istream& inputfiles)
 {
-  // init the input stream for reading of the next event
+  // Init the input stream for reading of events from next file
   if (mInputStream) {
     // delete previous raw reader and stream
     delete mInputStream;
@@ -335,9 +352,9 @@ int ChannelMerger::AddChannel(float offset, unsigned int index, AliAltroRawStrea
   return 0;
 }
 
-int ChannelMerger::Normalize(unsigned count)
+int ChannelMerger::Normalize(unsigned scalingFactor)
 {
-  if (count==0) return 0;
+  if (scalingFactor==0) return 0;
 
   for (std::map<unsigned int, unsigned int>::const_iterator chit=mChannelPositions.begin();
        chit!=mChannelPositions.end(); chit++) {
@@ -347,7 +364,7 @@ int ChannelMerger::Normalize(unsigned count)
     for (unsigned i=0; i<mChannelLenght; i++) {
       unsigned signal=mBuffer[position+i];
       if (signal == VOID_SIGNAL) continue;
-      mBuffer[position+i]=signal/count;
+      mBuffer[position+i]=signal/scalingFactor;
     }
   }
 }
