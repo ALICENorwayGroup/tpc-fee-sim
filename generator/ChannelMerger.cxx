@@ -51,10 +51,10 @@ ChannelMerger::ChannelMerger()
   , mInputStream(NULL)
   , mInputStreamMinDDL(-1)
   , mInputStreamMaxDDL(-1)
-  , mChannelHistograms(new TFolder("ChannelHistograms", "ChannelHistograms"))
   , mMinPadRow(-1)
   , mMaxPadRow(-1)
   , mNoiseFactor(0)
+  , mChannelHistograms(new TFolder("ChannelHistograms", "ChannelHistograms"))
 {
   if (mChannelHistograms) mChannelHistograms->IsOwner();
 }
@@ -273,8 +273,8 @@ int ChannelMerger::AddChannel(float offset, unsigned int index, AliAltroRawStrea
 	} else if (bSignalPeak && currentSignal>threshold) {
 	  // signal belonging to active signal peak
 	} else if (bSignalPeak && currentSignal<=threshold) {
-	  if (i+1<bunchLength && signals[i+1]>threshold ||
-	      i+2<bunchLength && signals[i+2]>threshold) {
+	  if ((i+1<bunchLength && signals[i+1]>threshold) ||
+	      (i+2<bunchLength && signals[i+2]>threshold)) {
 	    // signal below threshold after peak, merged if next or
 	    // next to next signal over threshold
 	    // two signal peaks intercepted by one or two consecutive
@@ -358,7 +358,6 @@ int ChannelMerger::Normalize(unsigned scalingFactor)
 
   for (std::map<unsigned int, unsigned int>::const_iterator chit=mChannelPositions.begin();
        chit!=mChannelPositions.end(); chit++) {
-    unsigned index=chit->first;
     unsigned position=chit->second;
     position*=mChannelLenght;
     for (unsigned i=0; i<mChannelLenght; i++) {
@@ -367,6 +366,7 @@ int ChannelMerger::Normalize(unsigned scalingFactor)
       mBuffer[position+i]=signal/scalingFactor;
     }
   }
+  return 0;
 }
 
 int ChannelMerger::Analyze(TTree& target, const char* statfilename)
@@ -565,8 +565,6 @@ int ChannelMerger::InitChannelBaseline(const char* filename, int baselineshift)
 
   int DDLNumber=-1;
   int HWAddr=-1;
-  int MinSignal=-1;
-  int MaxSignal=-1;
   int AvrgSignal=-1;
 
   const int bufferSize=1024;
@@ -586,6 +584,7 @@ int ChannelMerger::InitChannelBaseline(const char* filename, int baselineshift)
     // read the rest of the line
     input.getline(buffer, bufferSize);
   }
+  return 0;
 }
 
 int ChannelMerger::InitAltroMapping(const char* filename)
@@ -674,8 +673,8 @@ int ChannelMerger::SignalBufferZeroSuppression(ChannelMerger::buffer_t* buffer, 
       } else if (bSignalPeak && currentSignal>threshold) {
 	// signal belonging to active signal peak
       } else if (bSignalPeak && currentSignal<=threshold) {
-	if (i>=1 && buffer[i-1] != VOID_SIGNAL && buffer[i-1]>threshold ||
-	    i>=2 && buffer[i-1] != VOID_SIGNAL && buffer[i-2] != VOID_SIGNAL && buffer[i-2]>threshold) {
+	if ((i>=1 && buffer[i-1] != VOID_SIGNAL && buffer[i-1]>threshold) ||
+	    (i>=2 && buffer[i-1] != VOID_SIGNAL && buffer[i-2] != VOID_SIGNAL && buffer[i-2]>threshold)) {
 	  // signal below threshold after peak, merged if next or
 	  // next to next signal over threshold
 	  // two signal peaks intercepted by one or two consecutive
@@ -714,6 +713,7 @@ int ChannelMerger::SignalBufferZeroSuppression(ChannelMerger::buffer_t* buffer, 
 
     return nFilledTimebins;
   }
+  return 0;
 }
 
 int ChannelMerger::WriteTimeframe(const char* filename)
@@ -955,11 +955,11 @@ int ChannelMerger::ApplyCommonModeEffect(int scalingFactor)
   // 1. loop over all channels and sum ZS signals in each timebin
   for (std::map<unsigned int, unsigned int>::const_iterator chit=mChannelPositions.begin();
        chit!=mChannelPositions.end(); chit++) {
-    unsigned index=chit->first;
     unsigned position=chit->second;
     position*=mChannelLenght;
     buffer_t* signalBuffer=mBuffer+position;
     int result=SignalBufferZeroSuppression(signalBuffer, mChannelLenght, GetThreshold(), mBaselineshift, &zsSignal[0]);
+    if (result < 0) return result;
     for (unsigned i=0; i<mChannelLenght; ++i) {
       if (zsSignal[i] == VOID_SIGNAL) continue;
       cmSignal[i]+=zsSignal[i];
@@ -973,12 +973,12 @@ int ChannelMerger::ApplyCommonModeEffect(int scalingFactor)
   unsigned nUnderflowChannels=0;
   for (std::map<unsigned int, unsigned int>::const_iterator chit=mChannelPositions.begin();
        chit!=mChannelPositions.end(); chit++) {
-    unsigned index=chit->first;
     unsigned position=chit->second;
     position*=mChannelLenght;
     bool bHaveUnderflow=false;
     buffer_t* signalBuffer=mBuffer+position;
     int result=SignalBufferZeroSuppression(signalBuffer, mChannelLenght, GetThreshold(), mBaselineshift, &zsSignal[0]);
+    if (result < 0) return result;
     for (unsigned i=0; i<mChannelLenght; ++i) {
       unsigned int cmImpact=cmSignal[i];
       if (zsSignal[i] != VOID_SIGNAL) {

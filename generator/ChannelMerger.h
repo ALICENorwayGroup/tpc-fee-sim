@@ -271,11 +271,11 @@ class ChannelMerger {
    */
   unsigned ManipulateNoise(unsigned signal) const;
 
+  typedef unsigned short buffer_t;
+
  protected:
 
  private:
-  typedef unsigned short buffer_t;
-
   /**
    * Grow both sample and underflow buffer.
    */
