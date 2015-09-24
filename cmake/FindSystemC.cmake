@@ -29,31 +29,40 @@ message(STATUS "Searching for SystemC")
 # custom hints to find SystemC installation
 # option 1) -DSYSTEMC_PREFIX=<path to installation> flag
 # option 2) environment variable SYSTEMC_PREFIX
-SET(SYSTEMC_SEARCH_HINTS
-  ${SYSTEMC_PREFIX}/include
-  ${SYSTEMC_PREFIX}/lib
-  ${SYSTEMC_PREFIX}/lib-linux
-  ${SYSTEMC_PREFIX}/lib-linux64
-  ${SYSTEMC_PREFIX}/lib-macos
-  $ENV{SYSTEMC_PREFIX}/include
-  $ENV{SYSTEMC_PREFIX}/lib
-  $ENV{SYSTEMC_PREFIX}/lib-linux
-  $ENV{SYSTEMC_PREFIX}/lib-linux64
-  $ENV{SYSTEMC_PREFIX}/lib-macos
+# include and library paths are put together in one list for simplicity
+set(SEARCH_HINTS_EXTENSIONS
+  include
+  lib
+  lib-linux
+  lib-linux64
+  lib-macos
+  lib-macosx64
   )
+
+SET(SYSTEMC_SEARCH_PATHS
+  ${SYSTEMC_SEARCH_PATHS}
+  /usr/include/systemc
+  )
+
+if(NOT DEFINED SYSTEMC_PREFIX)
+  SET(SYSTEMC_PREFIX $ENV{SYSTEMC_PREFIX})
+endif(NOT DEFINED SYSTEMC_PREFIX)
+
+foreach(extension ${SEARCH_HINTS_EXTENSIONS})
+if(DEFINED SYSTEMC_PREFIX)
+SET(SYSTEMC_SEARCH_HINTS
+  ${SYSTEMC_SEARCH_HINTS}
+  ${SYSTEMC_PREFIX}/${extension}
+  )
+endif(DEFINED SYSTEMC_PREFIX)
 
 # Possibe system wide installation paths for searches
 SET(SYSTEMC_SEARCH_PATHS
-  /usr/include/systemc
-  /usr/lib
-  /usr/lib-linux
-  /usr/lib-linux64
-  /usr/lib-macos
-  /usr/local/lib
-  /usr/local/lib-linux
-  /usr/local/lib-linux64
-  /usr/local/lib-macos
+  ${SYSTEMC_SEARCH_PATHS}
+  /usr/${extension}
+  /usr/local/${extension}
   )
+endforeach(extension)
 
 FIND_FILE(_SYSTEMC_VERSION_FILE
   NAMES sc_ver.h
@@ -82,19 +91,31 @@ FIND_PATH(SYSTEMC_INCDIR
   PATHS ${SYSTEMC_SEARCH_PATHS}
 )
 
-set(SYSTEMC_LIBRARIES libsystemc.so)
+set(SYSTEMC_SEARCH_LIBRARY systemc)
 
-FIND_PATH(SYSTEMC_LIBDIR
-  NAMES ${SYSTEMC_LIBRARIES}
+FIND_LIBRARY(SYSTEMC_LIBRARY
+  NAMES ${SYSTEMC_SEARCH_LIBRARY}
   HINTS ${SYSTEMC_SEARCH_HINTS}
   PATHS ${SYSTEMC_SEARCH_PATHS}
+  DOC "SystemC libraries)"
+)
+
+GET_FILENAME_COMPONENT(SYSTEMC_LIBDIR
+  ${SYSTEMC_LIBRARY}
+  DIRECTORY
+)
+
+# for the moment there is only one SystemC library
+GET_FILENAME_COMPONENT(SYSTEMC_LIBRARIES
+  ${SYSTEMC_LIBRARY}
+  NAME
 )
 
 if (EXISTS ${SYSTEMC_INCDIR} AND
     EXISTS ${SYSTEMC_LIBDIR})
     set(SYSTEMC_FOUND 1)
 else()
-# TODO: probably some errro message
+# TODO: probably some error message
 endif (EXISTS ${SYSTEMC_INCDIR} AND
        EXISTS ${SYSTEMC_LIBDIR})
 
@@ -104,5 +125,5 @@ message(STATUS "SYSTEMC_INCDIR:     ${SYSTEMC_INCDIR}")
 message(STATUS "SYSTEMC_LIBDIR:     ${SYSTEMC_LIBDIR}")
 message(STATUS "SystemC library:    ${SYSTEMC_LIBRARIES}")
 else()
-message(STATUS "... not found")
+message(STATUS "... not found, you might want to specify -DSYSTEMC_PREFIX=<installation>")
 endif (${SYSTEMC_FOUND})
