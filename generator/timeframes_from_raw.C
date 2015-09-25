@@ -36,7 +36,12 @@
 #include "AliHLTHuffman.h"
 
 // configuration section
-const float g_rate=5.;    // rate with respect to unit time, i.e. framesize
+const int   g_pileupmode=3; // 0 - fixed number of collisions at offset 0
+                            // 1 - random number of collisions at offset 0
+                            // 2 - fixed number of collisions at random offset (not yet supported)
+                            // 3 - random number of collisions at random offset
+const float g_rate=5.;      // avrg rate with respect to unit time, i.e. framesize
+const int   g_ncollisions=10;  // number of collisions per frame for pileup mode 0 and 2
 const int   g_nframes=1000;    // number of timeframes to be generated
 const int   g_baseline=5; // place baseline at n ADC counts after pedestal subtraction
 const int   g_thresholdZS=2; // threshold for zero suppression, this requires the pedestal configuration to make sense
@@ -44,9 +49,18 @@ const int   g_noiseFactor=1; // manipulation of the noise, roughly multiplying b
 const int   g_doHuffmanCompression=0; // 0 - off, 1 - compression, 2 - training
 const int   g_huffmanLengthCutoff=0; // 0 - off, >0 symbols with lenght >= cutoff are stored with a marker of length cutoff and the original value
 const int   g_applyCommonModeEffect=0; // 0 - off, 1 = on
+const int   g_normalizeTimeframe=0; // 0 - off, 1 - normalize each TF by the number of included collisions
+const char* g_pedestalConfiguration="pedestal.dat"; // pedestal configuration file
+const char* g_channelMappingConfiguration="mapping.dat";
 const char* g_confFilenames="datafiles.txt";
 const char* g_huffmanFileName="TPCRawSignalDifference";
 const char* g_targetFileName="tpc-raw-channel-stat.root";
+const int   g_statisticsTreeMode=1; // 0 - off, 1 - normal, 2 - extended (including bunch length statistics)
+const char* g_statisticsTextFileName=NULL; // write channel statistics to a text file
+
+const char* g_asciiDataTargetDir=NULL;//"tfdata"; // write channel data to ascii file in target directory, off if NULL
+const char* g_systemsTargetdir=NULL;//"systemcinput"; // write input files for SystemC simulation to directory, off if NULL
+
 const int   ddlrange[2]={0, 1}; // range of DDLs to be read, use {-1, -1} for all
 const int   padrowrange[2]={-1, -1}; // range of padrows, use {-1, -1} to disable selection, Note: this requires the mapping file for channels
 
@@ -90,9 +104,12 @@ void timeframes_from_raw()
     merger.SetDDLRange(ddlrange[0], ddlrange[1]);
   if (padrowrange[0]>=0 && padrowrange[1]>=0)
     merger.SetPadRowRange(padrowrange[0], padrowrange[1]);
-  merger.InitChannelBaseline("pedestal.dat", -g_baseline); // note the '-'!
-  merger.InitAltroMapping("mapping.dat");
-  merger.InitZeroSuppression(g_thresholdZS);
+  if (g_pedestalConfiguration)
+    merger.InitChannelBaseline(g_pedestalConfiguration, -g_baseline); // note the '-'!
+  if (g_channelMappingConfiguration)
+    merger.InitAltroMapping(g_channelMappingConfiguration);
+  if (g_thresholdZS>=0)
+    merger.InitZeroSuppression(g_thresholdZS);
   merger.InitNoiseManipulation(g_noiseFactor);
   bool bHaveSignalOverflow=false;
 
@@ -119,6 +136,7 @@ void timeframes_from_raw()
   hNCollisions->GetXaxis()->SetTitle("number of collisions in TF");
   hNCollisions->GetYaxis()->SetTitle("count");
 
+  // vaiables for the statistics tree
   int TimeFrameNo=0;
   int NCollisions=0;
   int DDLNumber=0;
@@ -136,8 +154,12 @@ void timeframes_from_raw()
   int BunchLength[1]; // length is dummy, different variable used for tree filling
   float HuffmanFactor=1.;
 
+  // due to the interface design of the ChannelMerger::Analyze function we
+  // always need to set up an object passed then by reference, it can
+  // be , however, empty
   TTree *channelstat=new TTree("channelstat","TPC RAW channel statistics");
-  if (channelstat) {
+  if (channelstat && g_statisticsTreeMode > 0) {
+    // no branches are added if statistics tree mode is 0
     channelstat->Branch("TimeFrameNo"    , &TimeFrameNo     , "TimeFrameNo/I");
     channelstat->Branch("NCollisions"    , &NCollisions     , "NCollisions/I");
     channelstat->Branch("DDLNumber"      , &DDLNumber       , "DDLNumber/I");
@@ -152,7 +174,10 @@ void timeframes_from_raw()
     channelstat->Branch("MaxTimebin"     , &MaxTimebin      , "MaxTimebin/I");
     channelstat->Branch("NFilledTimebins", &NFilledTimebins , "NFilledTimebins/I");
     channelstat->Branch("NBunches"       , &NBunches        , "NBunches/I");
-    channelstat->Branch("BunchLength"    , BunchLength      , "BuncheLength[NBunches]/i");
+    if (g_statisticsTreeMode >= 2) {
+      // extended statistics
+      channelstat->Branch("BunchLength"    , BunchLength      , "BuncheLength[NBunches]/i");
+    }
   }
 
   TTree *huffmanstat=NULL;
@@ -200,6 +225,11 @@ void timeframes_from_raw()
   float lastTime=0.;
 
   while (TimeFrameNo++<g_nframes || g_nframes<0) {
+    if (g_statisticsTextFileName != NULL && TimeFrameNo > 1) {
+      // statistics file is written for only one time frame, it would overwrite
+      // previous frames
+      break;
+    }
     if (bInverseWrtTF) {
       // collision offsets are with respect to the end of timeframe
       lastTime+=1.;
@@ -208,17 +238,26 @@ void timeframes_from_raw()
       lastTime-=1.;
     }
 
-    const std::vector<float>& randomTF=generator.SimulateCollisionSequence();
-    // merge random number of collisions at random offsets
-    const std::vector<float>& tf=randomTF;
+    std::vector<float> tf;
 
-    // merge random number of collisions, each at offset 0.
-    //singleTF.resize(randomTF.size(), 0.);
-
-    // merge fixed number of collisions, each at offset 0.
-    //singleTF.resize(1, 0.);
-
-    //const std::vector<float>& tf=singleTF;
+    if ((g_pileupmode&0x1) == 0) {
+      // fixed number of collisions
+      if (g_pileupmode != 0) {
+	std::cerr << "fixed number of collisions at random offsets not yet supported" << std:: endl;
+	return;
+      }
+      tf.resize(g_ncollisions, 0.);
+    } else {
+      // random number of collisions
+      const std::vector<float>& randomTF=generator.SimulateCollisionSequence();
+      if ((g_pileupmode&0x2) == 0) {
+	// merge random number of collisions, each at offset 0.
+	tf.resize(randomTF.size(), 0.);
+      } else {
+	// merge random number of collisions at random offsets
+	tf=randomTF;
+      }
+    }
 
     if (hCollisionOffset || hCollisionTimes) {
       for (unsigned i=0; i<tf.size(); i++) {
@@ -246,13 +285,15 @@ void timeframes_from_raw()
     NCollisions=tf.size();
     merger.StartTimeframe();
     int mergedCollisions=merger.MergeCollisions(tf, *inputfiles);
-    // normalization for estimation of baseline
-    // not to be used for colision pileup in timeframes
-    //merger.Normalize(NCollisions);
+    if (g_normalizeTimeframe) {
+      // normalization for estimation of baseline
+      // not to be used for colision pileup in timeframes
+      merger.Normalize(NCollisions);
+    }
     merger.CalculateZeroSuppression(g_doHuffmanCompression==0);
     if (g_applyCommonModeEffect>0)
       merger.ApplyCommonModeEffect();
-    merger.Analyze(*channelstat);
+    merger.Analyze(*channelstat, g_statisticsTextFileName);
     if (g_doHuffmanCompression>0) {
       merger.DoHuffmanCompression(pHuffman, g_doHuffmanCompression==2, *hHuffmanFactor, *hSignalDiff, huffmanstat, g_huffmanLengthCutoff);
     }
@@ -269,14 +310,24 @@ void timeframes_from_raw()
       break;
     }
 
-    if (0) {
+    if (g_asciiDataTargetDir) {
       // write timeframe data to file
-      TString dirname("tfdata");
+      TString dirname(g_asciiDataTargetDir);
       TString command("mkdir -p "); command+=dirname;
       gSystem->Exec(command.Data());
       TString filename;
       filename.Form("%s/tf%04d.dat", dirname.Data(), TimeFrameNo-1);
       merger.WriteTimeframe(filename.Data());
+    }
+
+    if (g_systemsTargetdir != NULL) {
+      // write to text file used for SystemC simulation
+      TString dirname(g_systemsTargetdir);
+      TString command("mkdir -p "); command+=dirname;
+      gSystem->Exec(command.Data());
+      TString filename;
+      filename.Form("%s/event%04d.dat", dirname.Data(), TimeFrameNo-1);
+      merger.WriteSystemcInputFile(filename.Data());
     }
 
     std::cout << "Successfully generated timeframe " << TimeFrameNo << " from " << tf.size() << " collision(s)" << std::endl;
@@ -317,7 +368,7 @@ void timeframes_from_raw()
   }
 
   of->cd();
-  if (channelstat) {
+  if (channelstat && g_statisticsTreeMode > 0) {
     channelstat->Print();
     channelstat->Write();
   }
