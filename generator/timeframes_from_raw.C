@@ -17,7 +17,8 @@
   TString macroname=gInterpreter->GetCurrentMacroName();
   macroname+="+";
   gSystem->Load("libGenerator.so");
-  gROOT->LoadMacro("ChannelMerger.cxx+");
+  if (gSystem->DynFindSymbol("Generator", "__IsChannelMergerIncludedInLibrary") == NULL)
+    gROOT->LoadMacro("ChannelMerger.cxx+");
   gROOT->LoadMacro(macroname);
   timeframes_from_raw();
 }
