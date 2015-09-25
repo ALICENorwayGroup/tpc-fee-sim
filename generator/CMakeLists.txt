@@ -11,6 +11,13 @@ set(SOURCES
   GeneratorTF.cxx
 )
 
+if(AliRoot_FOUND)
+set(SOURCES
+  ${SOURCES}
+  ChannelMerger.cxx
+)
+endif(AliRoot_FOUND)
+
 string (REGEX REPLACE "\\.cxx" ".obj" OBJECTS "${SOURCES}")
 
 set(DEPENDENCIES

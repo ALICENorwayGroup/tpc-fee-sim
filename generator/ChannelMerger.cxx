@@ -1018,3 +1018,13 @@ unsigned ChannelMerger::ManipulateNoise(unsigned signal) const
     noisesignal -= -mBaselineshift * (factor - 1);
   return noisesignal;
 }
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+  // this function can be used to check whether the ChannelMerger is part
+  // of the Generator library
+  bool __IsChannelMergerIncludedInLibrary() {return true;}
+#ifdef __cplusplus
+}
+#endif
