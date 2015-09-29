@@ -1,24 +1,24 @@
-/// @file   create-systemc-input.C
+/// @file   create-pedestal-configuration.C
 /// @author Matthias.Richter@scieq.net
-/// @date   2015-09-23
-/// @brief  Create input files for the SystemC simulation
+/// @date   2015-09-28
+/// @brief  Extract pedestal configuration files from raw data
 ///
 /// This is an interface macro to functionality of the ChannelMerger
 /// class. The steering macro timeframes_from_raw.C is compiled and
 /// the steering function is called with appropriate parameters. See
 /// description of parameters below in the function call.
 ///
-/// The macro is intended to write input files for the SystemC
-/// simulation. Probably its just a temporary helper solution, as the
-/// format might be changed. The SystemC simulation will be interfaced
-/// directly to the generator, thus avoiding intermediate files.
-///
-/// Note: only one DDL file at a time should be processed, as the output
-/// format does not allow to differentiate amongst different DDLs and
-/// data would get mixed.
+/// The macro is intended to extract pedestal configuration values
+/// from black events by averaging the signal of a number of events.
+/// Assuming a uniform distribution of cluster signals, the influence
+/// of the signals to the average value is decreasing with increasing
+/// number of summed collisions, while the pedestal signal remains
+/// The default number of events is set to 50 from experience.
+/// Please note that summing signals of a large number of events might
+/// cause an overflow of the signal buffer (currently 16 bit range).
 ///
 /// Usage:
-///  root -b -q -l create-systemc-input.C
+///  root -b -q -l create-pedestal-configuration.C
 ///
 /// Input:
 ///  Input files can be specified in a text file, by default "datafiles.txt",
@@ -26,28 +26,14 @@
 ///  input.
 ///
 /// Output:
-///  In the target directory, one ASCII file per frame is written with
-///  the following format:
-///   hw=<hwaddress>
-///   <starttime> <#signals>
-///   <starttime> <signal>
-///   <starttime-1> <signal>
-///   ...
+///  Text file with the channel statistic with the following format:
+///  <ddlno> <hwaddress> <avrg signal> <min> <max> <#timebins> <#bunches>
+///  Also a root file is generated containing a tree with statistics.
 ///
-///  This block is repeated for all channels, 'starttimebin' corresponds
-///  to the highest filled timebin.
-///
+/// The statistics text file can be directly used as pedestal file, the
+/// default name in timeframes_from_raw.C is 'pedestal.dat'.
 #if defined(__CINT__) && !defined(__MAKECINT__)
 {
-  // number of events or loop until end of input if specified
-  const int nevt=-1;
-
-  // DDL ID, note that only one DDL should be processed at a time
-  const int ddlid=0;
-
-  // target directory
-  const char* tgtdir="systemcinput";
-
   gSystem->AddIncludePath("-I$ROOTSYS/include -I$ALICE_ROOT/include -I.");
   TString macroname="timeframes_from_raw.C";
   macroname+="+";
@@ -55,31 +41,28 @@
   if (gSystem->DynFindSymbol("Generator", "__IsChannelMergerIncludedInLibrary") == NULL)
     gROOT->LoadMacro("ChannelMerger.cxx+");
   gROOT->LoadMacro(macroname);
-
-  std::cout << "#### Creating input files for SystemC simnulation in directory '" << tgtdir << "'" << std::endl;
-  std::cout << "####  Using data of DDL " << ddlid << std::endl;
   timeframes_from_raw(0,     // pileup mode 0 - fixed number of collisions at offset 0
 		      5.,    // ignored: avrg rate with respect to unit time
-                      1,     // one collision per frame
-                      nevt,  // number of events or loop until end of input if specified
+                      50,    // number of collisions to average the signal
+                      1,     // generate one timeframe
                       -1,    // disabled: baseline
                       -1,    // disabled zero suppression
                       1,     // noise manipulation factor
                       0,     // disabled: Huffman compression
                       0,     // disabled: Huffman code length cutoff
                       0,     // disabled: common mode effect
-                      0,     // do the normalization
+                      1,     // do the normalization
                       NULL,  // disabled: pedestal configuration file
                       NULL,  // disabled: padrow mapping file
 		      "datafiles.txt", // input data files
                       NULL,  // disabled: Huffman table name
-                      "tpc-raw-statistics.root",
+                      "pedestal-statistics.root",
                       1,     // statistics tree mode: 1 - normal
-                      NULL,  // disabled: write channel statistics to a text file
+                      "pedestal-statistics.txt",    // write channel statistics to a text file
                       NULL,  // disabled: write channel data to ASCII file in target directory
-                      tgtdir,// target directory to write input files for SystemC simulation to directory
-                      ddlid, // range of DDLs to be read, min ddl
-                      ddlid, // range of DDLs to be read, max ddl
+                      NULL,  // disabled: write input files for SystemC simulation to directory
+                      0,     // range of DDLs to be read, min ddl
+                      215,   // range of DDLs to be read, max ddl
                       -1,    // disabled: range of padrows
                       -1
 );

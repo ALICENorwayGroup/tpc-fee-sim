@@ -20,6 +20,8 @@
   if (gSystem->DynFindSymbol("Generator", "__IsChannelMergerIncludedInLibrary") == NULL)
     gROOT->LoadMacro("ChannelMerger.cxx+");
   gROOT->LoadMacro(macroname);
+  // running parameters can be changed by adjusting the default parameters
+  // of the function definition below
   timeframes_from_raw();
 }
 #else
@@ -35,37 +37,38 @@
 #include "TSystem.h"
 #include "AliHLTHuffman.h"
 
-// configuration section
-const int   g_pileupmode=3; // 0 - fixed number of collisions at offset 0
-                            // 1 - random number of collisions at offset 0
-                            // 2 - fixed number of collisions at random offset (not yet supported)
-                            // 3 - random number of collisions at random offset
-const float g_rate=5.;      // avrg rate with respect to unit time, i.e. framesize
-const int   g_ncollisions=10;  // number of collisions per frame for pileup mode 0 and 2
-const int   g_nframes=1000;    // number of timeframes to be generated
-const int   g_baseline=5; // place baseline at n ADC counts after pedestal subtraction
-const int   g_thresholdZS=2; // threshold for zero suppression, this requires the pedestal configuration to make sense
-const int   g_noiseFactor=1; // manipulation of the noise, roughly multiplying by factor
-const int   g_doHuffmanCompression=0; // 0 - off, 1 - compression, 2 - training
-const int   g_huffmanLengthCutoff=0; // 0 - off, >0 symbols with lenght >= cutoff are stored with a marker of length cutoff and the original value
-const int   g_applyCommonModeEffect=0; // 0 - off, 1 = on
-const int   g_normalizeTimeframe=0; // 0 - off, 1 - normalize each TF by the number of included collisions
-const char* g_pedestalConfiguration="pedestal.dat"; // pedestal configuration file
-const char* g_channelMappingConfiguration="mapping.dat";
-const char* g_confFilenames="datafiles.txt";
-const char* g_huffmanFileName="TPCRawSignalDifference";
-const char* g_targetFileName="tpc-raw-channel-stat.root";
-const int   g_statisticsTreeMode=1; // 0 - off, 1 - normal, 2 - extended (including bunch length statistics)
-const char* g_statisticsTextFileName=NULL; // write channel statistics to a text file
-
-const char* g_asciiDataTargetDir=NULL;//"tfdata"; // write channel data to ascii file in target directory, off if NULL
-const char* g_systemsTargetdir=NULL;//"systemcinput"; // write input files for SystemC simulation to directory, off if NULL
-
-const int   ddlrange[2]={0, 1}; // range of DDLs to be read, use {-1, -1} for all
-const int   padrowrange[2]={-1, -1}; // range of padrows, use {-1, -1} to disable selection, Note: this requires the mapping file for channels
-
-void timeframes_from_raw()
+void timeframes_from_raw(const int   g_pileupmode=3, // 0 - fixed number of collisions at offset 0
+                                                     // 1 - random number of collisions at offset 0
+                                                     // 2 - fixed number of collisions at random offset (not yet supported)
+                                                     // 3 - random number of collisions at random offset
+                         const float g_rate=5.,      // avrg rate with respect to unit time, i.e. framesize
+                         const int   g_ncollisions=10,  // number of collisions per frame for pileup mode 0 and 2
+                         const int   g_nframes=1000,    // number of timeframes to be generated
+                         const int   g_baseline=5, // place baseline at n ADC counts after pedestal subtraction
+                         const int   g_thresholdZS=2, // threshold for zero suppression, this requires the pedestal configuration to make sense
+                         const int   g_noiseFactor=1, // manipulation of the noise, roughly multiplying by factor
+                         const int   g_doHuffmanCompression=0, // 0 - off, 1 - compression, 2 - training
+                         const int   g_huffmanLengthCutoff=0, // 0 - off, >0 symbols with lenght >= cutoff are stored with a marker of length cutoff and the original value
+                         const int   g_applyCommonModeEffect=0, // 0 - off, 1 = on
+                         const int   g_normalizeTimeframe=0, // 0 - off, 1 - normalize each TF by the number of included collisions
+                         const char* g_pedestalConfiguration="pedestal.dat", // pedestal configuration file
+                         const char* g_channelMappingConfiguration="mapping.dat",
+                         const char* g_confFilenames="datafiles.txt",
+                         const char* g_huffmanFileName="TPCRawSignalDifference",
+                         const char* g_targetFileName="tpc-raw-channel-stat.root",
+                         const int   g_statisticsTreeMode=1, // 0 - off, 1 - normal, 2 - extended (including bunch length statistics)
+                         const char* g_statisticsTextFileName=NULL, // write channel statistics to a text file
+                         const char* g_asciiDataTargetDir=NULL,//"tfdata", // write channel data to ascii file in target directory, off if NULL
+                         const char* g_systemsTargetdir=NULL,//"systemcinput", // write input files for SystemC simulation to directory, off if NULL
+			 const int   g_minddl=0, // range of DDLs to be read, -1 to disable
+			 const int   g_maxddl=1,
+			 const int   g_minpadrow=-1, // range of padrows, use -1 to disable selection, Note: this requires the mapping file for channels
+			 const int   g_maxpadrow=-1
+                         )
 {
+  const int   ddlrange[2]={g_minddl, g_maxddl};
+  const int   padrowrange[2]={g_minpadrow, g_maxpadrow};
+
   // signal bit length
   const int signalBitLength=10;
   const int signalRange=0x1<<signalBitLength;
