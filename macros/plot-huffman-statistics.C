@@ -31,18 +31,18 @@
 
 void formatHuffmanFactorVsOccupancy(TH1& h, const char* type = "");
 
-// TODO: needs to be configured together with data set
-const char* typeNames[] = {
-      "Full Huffman",
-      "Full Huffman, Data with common mode effect",
-      "Truncated Huffman, Data with common mode effect"
-};
-
 struct dataset_t {
+  int  type;
   TH1* hHuffmanFactor;
   TH1* hOccupancy;
   TProfile* hHuffmanFactorVsPadrow;
   TProfile* hOccupancyVsPadrow;
+};
+
+struct datadefinition_t {
+  const char* filename;
+  int         type;
+  const char* selection;
 };
 
 template<typename T>
@@ -57,24 +57,35 @@ T* project(T*,
   tree.Project(name, expr, cut, option, tree.GetEntries(), 0);
   TObject* obj = gDirectory->Get(name);
   if (!obj) return NULL;
-  std::cout << "Created object '" << obj->GetName() << "' of type " << obj->ClassName() << std::endl;
+  std::cout << "Created object '" << obj->GetName() << "(" << obj->GetTitle() << ")" << "' of type " << obj->ClassName() << std::endl;
   obj->Draw();
   return dynamic_cast<T*>(obj);
 }
 
 void plot_huffman_statistics()
 {
-  //const char* inputfilename="../generator/results/HuffmanCompression_100TF_one-event_highmult_137228_ddl-0-17/tpc-raw-channel-stat.root";
-  const char* inputfilename="../generator/results/HuffmanCompression_1000TF_highmult_137228_ddl-0-1/tpc-raw-channel-stat.root";
+  const char* typeNames[] = {
+    "Full Huffman",
+    "Full Huffman, Data with common mode effect",
+    "Truncated Huffman, Data with common mode effect",
+    NULL
+  };
+
+  datadefinition_t inputdefinitions[] = {
+    {"tpc-raw-channel-stat_1.root", 0, "NFilledTimebins>0"},
+    {"tpc-raw-channel-stat_2.root", 1, "NFilledTimebins>0"},
+    {"tpc-raw-channel-stat_3.root", 2, "NFilledTimebins>0"},
+    {NULL, -1, NULL}
+  };
   std::vector<dataset_t> datasets;
   TList histograms;
 
   TFile output("plots.root", "RECREATE");
 
-  do {
-    std::auto_ptr<TFile> input(TFile::Open(inputfilename));
+  for (int idefinition = 0; inputdefinitions[idefinition].filename != NULL; idefinition++) {
+    std::auto_ptr<TFile> input(TFile::Open(inputdefinitions[idefinition].filename));
     if (not input.get() or input->IsZombie()) {
-      std::cerr << "can not open " << inputfilename << std::endl;
+      std::cerr << "can not open " << inputdefinitions[idefinition].filename << std::endl;
       continue;
     }
 
@@ -100,17 +111,22 @@ void plot_huffman_statistics()
 
     dataset_t& dataset = datasets.back();
 
-    dataset.hHuffmanFactor         = project((TH1*)NULL, *tree, "hHuffmanFactor", "HuffmanFactor");
-    dataset.hOccupancy             = project((TH1*)NULL, *tree, "hOccupancy", "NFilledTimebins/1024");
-    dataset.hHuffmanFactorVsPadrow = project((TProfile*)NULL, *tree, "HuffmanFactorVsPadrow", "HuffmanFactor:PadRow", "PadRow>=0", "prof");
-    dataset.hOccupancyVsPadrow     = project((TProfile*)NULL, *tree, "hOccupancyVsPadrow", "NFilledTimebins/1024:PadRow","PadRow>=0","prof");
+    TString histoname;
+    dataset.type                   = inputdefinitions[idefinition].type;
+    histoname.Form("hHuffmanFactor_%d_%d", idefinition, dataset.type);
+    dataset.hHuffmanFactor         = project((TH1*)NULL, *tree, histoname.Data(), "HuffmanFactor");
+    histoname.Form("hOccupancy_%d_%d", idefinition, dataset.type);
+    dataset.hOccupancy             = project((TH1*)NULL, *tree, histoname.Data(), "NFilledTimebins/1024");
+    histoname.Form("hHuffmanFactorVsPadrow_%d_%d", idefinition, dataset.type);
+    dataset.hHuffmanFactorVsPadrow = project((TProfile*)NULL, *tree, histoname.Data(), "HuffmanFactor:PadRow", inputdefinitions[idefinition].selection, "prof");
+    histoname.Form("hOccupancyVsPadrow_%d_%d", idefinition, dataset.type);
+    dataset.hOccupancyVsPadrow     = project((TProfile*)NULL, *tree, histoname.Data(), "NFilledTimebins/1024:PadRow",inputdefinitions[idefinition].selection,"prof");
 
     if (dataset.hHuffmanFactor) histograms.Add(dataset.hHuffmanFactor);
     if (dataset.hOccupancy) histograms.Add(dataset.hOccupancy);
     if (dataset.hHuffmanFactorVsPadrow) histograms.Add(dataset.hHuffmanFactorVsPadrow);
     if (dataset.hOccupancyVsPadrow) histograms.Add(dataset.hOccupancyVsPadrow);
-
-  } while (0);
+  }
 
   ///////////////////////////////////////////////////////////////////////////
   //
@@ -134,9 +150,11 @@ void plot_huffman_statistics()
   datatree->Branch("Occupancy"     , &Occupancy     , "Occupancy/F");
   datatree->Branch("huffmanfactor" , &huffmanfactor , "huffmanfactor/F");
 
+  int nTypes=-1;
   for (std::vector<dataset_t>::iterator dataset = datasets.begin();
        dataset != datasets.end(); dataset++) {
-    Type++;
+    if (dataset->type > nTypes) nTypes=dataset->type;
+    Type=dataset->type;
     
     TH1* hfproj = dataset->hHuffmanFactorVsPadrow->ProjectionX();
     TH1* occproj = dataset->hOccupancyVsPadrow->ProjectionX();
@@ -158,13 +176,15 @@ void plot_huffman_statistics()
   output.cd();
   histograms.Write();
 
-  int nTypes=Type+1;
+  nTypes++;
   std::vector<TProfile*> hfvsocc(nTypes, NULL);
 
   for (int itype = 0; itype < nTypes; itype++) {
+    TString histoname;
     TString selection;
+    histoname.Form("hHuffmanFactorVsOccupancy_%d", itype);
     selection.Form("Type==%d && Occupancy>0.", itype);
-    hfvsocc[itype] = project((TProfile*)NULL, *datatree, "hHuffmanFactorVsOccupancy", "huffmanfactor:Occupancy", selection.Data(), "prof");
+    hfvsocc[itype] = project((TProfile*)NULL, *datatree, histoname.Data(), "huffmanfactor:100*Occupancy", selection.Data(), "prof");
     if (hfvsocc[itype]) {
       formatHuffmanFactorVsOccupancy(*hfvsocc[itype]);
       hfvsocc[itype]->SetErrorOption();
@@ -173,14 +193,17 @@ void plot_huffman_statistics()
   }
 
   // step 3: combine plots in a canvas
+  int firstcolor = 1;
   TCanvas c1("ccompilation", "Huffman Compression vs. Occupancy");
-  TLegend *legend = new TLegend(.3,.4,.7,.7);
+  TLegend *legend = new TLegend(.3,.3,.7,.6);
   legend->SetBorderSize(0);
   legend->SetTextSize(.035);
   c1.cd();
   bool drawSame = false;
   for (int itype = 0; itype < nTypes; itype++) {
     if (hfvsocc[itype]) {
+      hfvsocc[itype]->SetLineColor(itype + firstcolor);
+      hfvsocc[itype]->SetMarkerColor(itype + firstcolor);
       hfvsocc[itype]->Draw(drawSame?"same":"");
       drawSame = true;
       legend->AddEntry(hfvsocc[itype], typeNames[itype], "lp");
