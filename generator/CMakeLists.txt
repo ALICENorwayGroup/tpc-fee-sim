@@ -14,15 +14,19 @@ set(SOURCES
 if(AliRoot_FOUND)
 set(SOURCES
   ${SOURCES}
+  DataGenerator.cxx
   ChannelMerger.cxx
 )
 endif(AliRoot_FOUND)
 
 string (REGEX REPLACE "\\.cxx" ".obj" OBJECTS "${SOURCES}")
 
+if(AliRoot_FOUND)
 set(DEPENDENCIES
   ${DEPENDENCIES}
+  RAWDatarec
 )
+endif(AliRoot_FOUND)
 
 #set(DEPENDENCIES
 #  ${DEPENDENCIES}
