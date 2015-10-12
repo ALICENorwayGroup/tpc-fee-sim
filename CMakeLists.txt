@@ -36,10 +36,10 @@ ENDIF(NOT UNIX)
 
 # Initialize CXXFLAGS.
 set(CMAKE_CXX_FLAGS                "-Wall -std=c++11")
-#set(CMAKE_CXX_FLAGS_DEBUG          "-O0 -g")
-#set(CMAKE_CXX_FLAGS_MINSIZEREL     "-Os -DNDEBUG")
-#set(CMAKE_CXX_FLAGS_RELEASE        "-O4 -DNDEBUG")
-#set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -g")
+set(CMAKE_CXX_FLAGS_DEBUG          "-O0 -g -ggdb")
+set(CMAKE_CXX_FLAGS_MINSIZEREL     "-Os -DNDEBUG")
+set(CMAKE_CXX_FLAGS_RELEASE        "-O4 -DNDEBUG")
+set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -g")
 
 # Check if the compilation flag -std=c++11 is set
 #If(NOT CMAKE_CXX_FLAGS)
