@@ -25,8 +25,6 @@
   TString macroname="timeframes_from_raw.C";
   macroname+="+";
   gSystem->Load("libGenerator.so");
-  if (gSystem->DynFindSymbol("Generator", "__IsChannelMergerIncludedInLibrary") == NULL)
-    gROOT->LoadMacro("ChannelMerger.cxx+");
   gROOT->LoadMacro(macroname);
   for (float rate = g_ratelow; rate < g_ratehigh + .1; rate+=1.) {
     for (int noisefactor = g_noisefactorlow; noisefactor <= g_noisefactorhigh; noisefactor++) {

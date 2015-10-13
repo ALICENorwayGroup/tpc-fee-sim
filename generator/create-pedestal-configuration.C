@@ -38,8 +38,6 @@
   TString macroname="timeframes_from_raw.C";
   macroname+="+";
   gSystem->Load("libGenerator.so");
-  if (gSystem->DynFindSymbol("Generator", "__IsChannelMergerIncludedInLibrary") == NULL)
-    gROOT->LoadMacro("ChannelMerger.cxx+");
   gROOT->LoadMacro(macroname);
   timeframes_from_raw(0,     // pileup mode 0 - fixed number of collisions at offset 0
 		      5.,    // ignored: avrg rate with respect to unit time

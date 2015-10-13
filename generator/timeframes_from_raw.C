@@ -17,16 +17,13 @@
   TString macroname=gInterpreter->GetCurrentMacroName();
   macroname+="+";
   gSystem->Load("libGenerator.so");
-  if (gSystem->DynFindSymbol("Generator", "__IsChannelMergerIncludedInLibrary") == NULL)
-    gROOT->LoadMacro("ChannelMerger.cxx+");
   gROOT->LoadMacro(macroname);
   // running parameters can be changed by adjusting the default parameters
   // of the function definition below
   timeframes_from_raw();
 }
 #else
-#include "GeneratorTF.h"
-#include "ChannelMerger.h"
+#include "DataGenerator.h"
 #include <vector>
 #include <iostream>
 #include <fstream>
@@ -34,7 +31,6 @@
 #include "TFile.h"
 #include "TH1F.h"
 #include "TH2F.h"
-#include "TSystem.h"
 #include "AliHLTHuffman.h"
 
 void timeframes_from_raw(const int   g_pileupmode=3, // 0 - fixed number of collisions at offset 0
@@ -101,30 +97,32 @@ void timeframes_from_raw(const int   g_pileupmode=3, // 0 - fixed number of coll
     delete htf;
   }
 
-  GeneratorTF generator(g_rate);
-  ChannelMerger merger;
+  TPC::DataGenerator generator(g_pileupmode);
   if (ddlrange[0]>=0 && ddlrange[1]>=0)
-    merger.SetDDLRange(ddlrange[0], ddlrange[1]);
+    generator.SetDDLRange(ddlrange[0], ddlrange[1]);
   if (padrowrange[0]>=0 && padrowrange[1]>=0)
-    merger.SetPadRowRange(padrowrange[0], padrowrange[1]);
+    generator.SetPadrowRange(padrowrange[0], padrowrange[1]);
   if (g_pedestalConfiguration)
-    merger.InitChannelBaseline(g_pedestalConfiguration, -g_baseline); // note the '-'!
+    generator.SetPedestalFileName(g_pedestalConfiguration);
   if (g_channelMappingConfiguration)
-    merger.InitAltroMapping(g_channelMappingConfiguration);
-  if (g_thresholdZS>=0)
-    merger.InitZeroSuppression(g_thresholdZS);
-  merger.InitNoiseManipulation(g_noiseFactor);
-  bool bHaveSignalOverflow=false;
-
-  std::istream* inputfiles=&std::cin;
-  std::ifstream inputconfiguration(g_confFilenames);
-  if (inputconfiguration.good()) {
-    inputfiles=&inputconfiguration;
-  } else {
-    std::cout << "Can not open configuration file '" << g_confFilenames << "' " << std::endl
-	      << "Reading input file names from std input, one filename per line, " << std::endl
-	      << "Abort the macro if nothing is provided to std input !!!" << std::endl;
+    generator.SetMappingFileName(g_channelMappingConfiguration);
+  if (g_thresholdZS>=0) {
+    generator.InitZeroSuppression(g_thresholdZS, g_baseline);
+    // using the huffman switch is kind of a legacy behavior originating from
+    // quick prototyping of some tests. In case of evaluation of Huffman
+    // compression the signal in the buffer must not be zero suppressed
+    // new macros should use an explicite configuration parameter
+    generator.SetApplyZeroSuppression(g_doHuffmanCompression==0);
   }
+  if (g_normalizeTimeframe)
+    generator.SetNormalizeChannels(true);
+  if (g_applyCommonModeEffect)
+    generator.SetApplyCommonModeEffect(true);
+
+  // variable g_ncollisions is obsolete when using the DataGenerator class
+  // it uses the rate parameter for both rate and number of collisions depending
+  // on overlay (pileup) mode, keep variable here and switch accordingly
+  generator.Init((g_pileupmode==0 || g_pileupmode==2)?g_ncollisions:g_rate, g_confFilenames);
 
   // statistics analysis
   TH1* hCollisionTimes=new TH1F("hCollisionTimes", "Time difference of collisions in TF", 100, 0., 2.);
@@ -218,12 +216,6 @@ void timeframes_from_raw(const int   g_pileupmode=3, // 0 - fixed number of coll
     hHuffmanFactor->GetYaxis()->SetTitle("Huffman compression factor");
   }
 
-  std::vector<float> singleTF;
-
-  // backup of last collision offset for calculation of time
-  // difference
-  // TODO: this variable can be set according to configuration/mode of generator
-  // if configuration is supported by the generator
   bool bInverseWrtTF=false; // set true if the generator produces offsets wrt end of TF
   float lastTime=0.;
 
@@ -233,34 +225,16 @@ void timeframes_from_raw(const int   g_pileupmode=3, // 0 - fixed number of coll
       // previous frames
       break;
     }
-    if (bInverseWrtTF) {
-      // collision offsets are with respect to the end of timeframe
-      lastTime+=1.;
-    } else {
-      // collision offsets are with respect to the start of timeframe
-      lastTime-=1.;
+
+    int result=generator.SimulateFrame();
+
+    if (result < 0) {
+      std::cout << "Simulation of timeframe failed with error code " << result
+		<< "; aborting at timeframe no " << TimeFrameNo << std::endl;
+      break;
     }
 
-    std::vector<float> tf;
-
-    if ((g_pileupmode&0x1) == 0) {
-      // fixed number of collisions
-      if (g_pileupmode != 0) {
-	std::cerr << "fixed number of collisions at random offsets not yet supported" << std:: endl;
-	return;
-      }
-      tf.resize(g_ncollisions, 0.);
-    } else {
-      // random number of collisions
-      const std::vector<float>& randomTF=generator.SimulateCollisionSequence();
-      if ((g_pileupmode&0x2) == 0) {
-	// merge random number of collisions, each at offset 0.
-	tf.resize(randomTF.size(), 0.);
-      } else {
-	// merge random number of collisions at random offsets
-	tf=randomTF;
-      }
-    }
+    const std::vector<float>& tf=generator.GetCollisionTimes();
 
     if (hCollisionOffset || hCollisionTimes) {
       for (unsigned i=0; i<tf.size(); i++) {
@@ -282,63 +256,36 @@ void timeframes_from_raw(const int   g_pileupmode=3, // 0 - fixed number of coll
 	}
       }
     }
+
+    NCollisions=result;
     if (hNCollisions) {
-      hNCollisions->Fill(tf.size());
-    }
-    NCollisions=tf.size();
-    merger.StartTimeframe();
-    int mergedCollisions=merger.MergeCollisions(tf, *inputfiles);
-    if (g_normalizeTimeframe) {
-      // normalization for estimation of baseline
-      // not to be used for colision pileup in timeframes
-      merger.Normalize(NCollisions);
-    }
-    merger.CalculateZeroSuppression(g_doHuffmanCompression==0);
-    if (g_applyCommonModeEffect>0)
-      merger.ApplyCommonModeEffect();
-    merger.Analyze(*channelstat, g_statisticsTextFileName);
-    if (g_doHuffmanCompression>0) {
-      merger.DoHuffmanCompression(pHuffman, g_doHuffmanCompression==2, *hHuffmanFactor, *hSignalDiff, huffmanstat, g_huffmanLengthCutoff);
-    }
-    if (merger.GetSignalOverflowCount() > 0) {
-      std::cout << "signal overflow in current timeframe detected" << std::endl;
-      bHaveSignalOverflow=true;
-    }
-    if (mergedCollisions < 0) {
-      std::cerr << "merging collisions failed with error code " << mergedCollisions << std::endl;
-      break;
-    } else if (mergedCollisions != (int)tf.size()) {
-      // probably no more input data to be read
-      std::cout << "simulated " << TimeFrameNo-1 << " timeframe(s)" << std::endl;
-      break;
+      hNCollisions->Fill(NCollisions);
     }
 
+    generator.AnalyzeTimeframe(*channelstat, g_statisticsTextFileName);
+
+    if (g_doHuffmanCompression>0) {
+      generator.EvaluateHuffmanCompression(pHuffman, g_doHuffmanCompression==2, *hHuffmanFactor, *hSignalDiff, huffmanstat, g_huffmanLengthCutoff);
+    }
+
+    //if (merger.GetSignalOverflowCount() > 0) {
+    //  std::cout << "signal overflow in current timeframe detected" << std::endl;
+    //  bHaveSignalOverflow=true;
+    //}
+
     if (g_asciiDataTargetDir) {
-      // write timeframe data to file
-      TString dirname(g_asciiDataTargetDir);
-      TString command("mkdir -p "); command+=dirname;
-      gSystem->Exec(command.Data());
-      TString filename;
-      filename.Form("%s/tf%04d.dat", dirname.Data(), TimeFrameNo-1);
-      merger.WriteTimeframe(filename.Data());
+      // write timeframe data to file in ASCII format
+      generator.WriteASCIIDataFormat(g_asciiDataTargetDir, "tf");
     }
 
     if (g_systemsTargetdir != NULL) {
       // write to text file used for SystemC simulation
-      TString dirname(g_systemsTargetdir);
-      TString command("mkdir -p "); command+=dirname;
-      gSystem->Exec(command.Data());
-      TString filename;
-      filename.Form("%s/event%04d.dat", dirname.Data(), TimeFrameNo-1);
-      merger.WriteSystemcInputFile(filename.Data());
+      generator.WriteSystemcDataFormat(g_systemsTargetdir, "event");
     }
-
-    std::cout << "Successfully generated timeframe " << TimeFrameNo << " from " << tf.size() << " collision(s)" << std::endl;
-    for (std::vector<float>::const_iterator element=tf.begin(); element!=tf.end(); element++) std::cout << "   collision at offset " << *element << std::endl;
   }
-  if (bHaveSignalOverflow) {
-    std::cout << "WARNING: signal overflow detected in at least one timeframe" << std::endl;
-  }
+  //if (bHaveSignalOverflow) {
+  //  std::cout << "WARNING: signal overflow detected in at least one timeframe" << std::endl;
+  //}
 
   if (pHuffman && g_doHuffmanCompression==2) {
     // training mode, calculate huffman table

@@ -52,8 +52,6 @@
   TString macroname="timeframes_from_raw.C";
   macroname+="+";
   gSystem->Load("libGenerator.so");
-  if (gSystem->DynFindSymbol("Generator", "__IsChannelMergerIncludedInLibrary") == NULL)
-    gROOT->LoadMacro("ChannelMerger.cxx+");
   gROOT->LoadMacro(macroname);
 
   std::cout << "#### Creating input files for SystemC simnulation in directory '" << tgtdir << "'" << std::endl;
