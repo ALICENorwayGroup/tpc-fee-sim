@@ -23,6 +23,7 @@
 #include <iostream>
 #include <vector>
 #include <map>
+#include <functional>
 
 class AliAltroRawStreamV3;
 class AliRawReader;
@@ -277,7 +278,10 @@ class ChannelMerger {
 
  private:
   /**
-   * Grow both sample and underflow buffer.
+   * Grow all internal data buffers to accommodate more channels.
+   *
+   * Size is number of elements which calculates as the number of channels
+   * times number of samples in some samples.
    */
   int GrowBuffer(unsigned newsize);
 
@@ -307,7 +311,29 @@ class ChannelMerger {
    * @param target        target buffer for ZS corrected value, optional, can be equal
    *                      to original signal buffer
    */
-  int SignalBufferZeroSuppression(buffer_t* buffer, unsigned size, unsigned threshold, int baselineshift, buffer_t* target=NULL) const;
+  template<typename SB, typename TB>
+  int SignalBufferZeroSuppression(const SB* buffer, unsigned size,
+                                  unsigned threshold, int baselineshift,
+                                  std::function<void (unsigned i)> flagZS= [] {},
+                                  TB* target=NULL) const;
+
+  // a version with one template parameter
+  template<typename SB>
+  int SignalBufferZeroSuppression(const SB* buffer, unsigned size,
+                                  unsigned threshold, int baselineshift,
+                                  std::function<void (unsigned i)> flagZS= [] {}) const
+  {
+    return SignalBufferZeroSuppression(buffer, size, threshold, baselineshift, flagZS, (buffer_t*)NULL);
+  }
+
+  // a version without lamda callback
+  template<typename SB, typename TB>
+  int SignalBufferZeroSuppression(const SB* buffer, unsigned size,
+                                  unsigned threshold, int baselineshift,
+                                  TB* target) const
+  {
+    return SignalBufferZeroSuppression(buffer, size, threshold, baselineshift, [] (unsigned i) {}, target);
+  }
 
   /*
    * Init the input stream for reading of events from next file
@@ -324,6 +350,8 @@ class ChannelMerger {
   unsigned mBufferSize;
   buffer_t* mBuffer;
   buffer_t* mUnderflowBuffer;
+  /// array of ZS flags, true if signal in timebin is going to suppressed
+  std::vector<bool> mZSflags;
   std::map<unsigned int, unsigned int> mChannelPositions;
   std::map<unsigned int, unsigned int> mChannelBaseline;
   std::map<unsigned int, unsigned int> mChannelMappingPadrow;
@@ -346,4 +374,76 @@ class ChannelMerger {
 
   TFolder* mChannelHistograms;
 };
+
+const ChannelMerger::buffer_t VOID_SIGNAL=~(ChannelMerger::buffer_t)(0);
+const ChannelMerger::buffer_t MAX_ACCUMULATED_SIGNAL=VOID_SIGNAL-1;
+
+template<typename SB, typename TB>
+int ChannelMerger::SignalBufferZeroSuppression(const SB* buffer, unsigned size,
+                                               unsigned threshold, int baselineshift,
+                                               std::function<void (unsigned i)> flagZS,
+                                               TB* target) const
+{
+  if (!buffer) return -1;
+  unsigned nFilledTimebins=0;
+  bool bSignalPeak=false;
+  for (int i=size-1; i>=0; i--) {
+    unsigned currentSignal=buffer[i];
+    if (currentSignal == VOID_SIGNAL) {
+      currentSignal=0;
+    }
+
+    if (!bSignalPeak && currentSignal>threshold &&
+        i>=1 && buffer[i-1]>threshold && buffer[i-1]!=VOID_SIGNAL) {
+      // signal peak starts at two consecutive signals over threshold
+      bSignalPeak=true;
+    } else if (bSignalPeak && currentSignal>threshold) {
+      // signal belonging to active signal peak
+    } else if (bSignalPeak && currentSignal<=threshold) {
+      if ((i>=1 && buffer[i-1] != VOID_SIGNAL && buffer[i-1]>threshold) ||
+          (i>=2 && buffer[i-1] != VOID_SIGNAL && buffer[i-2] != VOID_SIGNAL && buffer[i-2]>threshold)) {
+        // signal below threshold after peak, merged if next or
+        // next to next signal over threshold
+        // two signal peaks intercepted by one or two consecutive
+        // signals below threshold are merged
+      } else {
+        // signal below threshold after peak
+        bSignalPeak=false;
+        currentSignal=VOID_SIGNAL;
+      }
+    } else {
+      // suppress signal
+      currentSignal=VOID_SIGNAL;
+    }
+
+    if (currentSignal != VOID_SIGNAL) {
+      // finally remove the baselineshift from the remaining signals
+      // Note the sign of baselineshift, see comment in GetThreshold
+      if (baselineshift<0) {
+        if ((int)currentSignal>-baselineshift) currentSignal-=-baselineshift;
+        else currentSignal=0;
+      } else {
+        // TODO: not sure if this makes sense
+        currentSignal+=baselineshift;
+      }
+    }
+
+    if (target) {
+      if (buffer[i] != VOID_SIGNAL) {
+        target[i] = currentSignal;
+      } else {
+        target[i] = VOID_SIGNAL;
+      }
+    }
+    if (currentSignal != VOID_SIGNAL && buffer[i] != VOID_SIGNAL) {
+      nFilledTimebins++;
+    } else {
+      // flag the timebin as zero suppressed via the provided function
+      flagZS(i);
+    }
+  }
+
+  return nFilledTimebins;
+}
+
 #endif

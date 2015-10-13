@@ -30,15 +30,13 @@
 #include <fstream>
 #include <cstdlib>
 
-const ChannelMerger::buffer_t VOID_SIGNAL=~(ChannelMerger::buffer_t)(0);
-const ChannelMerger::buffer_t MAX_ACCUMULATED_SIGNAL=VOID_SIGNAL-1;
-
 ChannelMerger::ChannelMerger()
   : mChannelLenght(1024)
   , mInitialBufferSize(600000 * mChannelLenght * sizeof(buffer_t))
   , mBufferSize(0)
   , mBuffer(NULL) // TODO change to nullptr when moving to c++11
   , mUnderflowBuffer(NULL) // TODO change to nullptr when moving to c++11
+  , mZSflags()
   , mChannelPositions()
   , mChannelBaseline()
   , mChannelMappingPadrow()
@@ -158,6 +156,9 @@ int ChannelMerger::InitNextInputFile(std::istream& inputfiles)
 
 int ChannelMerger::GrowBuffer(unsigned newsize)
 {
+  // Grow all internal data buffers to accommodate more channels.
+  //
+  // Parameter specifies new number of elements
   if (newsize <= mBufferSize) return 0;
 
   buffer_t* lastData=mBuffer;
@@ -176,6 +177,8 @@ int ChannelMerger::GrowBuffer(unsigned newsize)
     delete [] lastData;
   }
   memset(mUnderflowBuffer+mBufferSize, 0xff, (newsize - mBufferSize) * sizeof(buffer_t));
+
+  mZSflags.resize(newsize, false);
 
   mBufferSize=newsize;
 
@@ -197,6 +200,10 @@ int ChannelMerger::StartTimeframe()
        it != mChannelOccupancy.end(); it++) {
     it->second=-1;
   }
+
+  unsigned vsize=mZSflags.size();
+  mZSflags.clear();
+  mZSflags.resize(vsize, false);
 
   return 0;
 }
@@ -220,15 +227,8 @@ int ChannelMerger::AddChannel(float offset, unsigned int index, AliAltroRawStrea
     baseline = mChannelBaseline[index];
   }
 
-  unsigned int threshold=mZSThreshold;
+  unsigned int threshold=GetThreshold();
   if (threshold != VOID_SIGNAL) {
-    if (mBaselineshift<0) {
-      threshold+=-mBaselineshift;
-    } else if (threshold<=(unsigned)mBaselineshift) {
-      threshold=0;
-    } else {
-      threshold-=mBaselineshift;
-    }
     // adjust threshold to baseline
     threshold+=baseline;
   }
@@ -249,50 +249,42 @@ int ChannelMerger::AddChannel(float offset, unsigned int index, AliAltroRawStrea
 
   position*=mChannelLenght;
   assert(position+mChannelLenght<=mBufferSize);
+  std::vector<bool> zsFlags;
   while (stream.NextBunch()) {
     int startTime=stream.GetStartTimeBin();
     startTime-=offset * mChannelLenght;
     int bunchLength=stream.GetBunchLength();
     const unsigned short* signals=stream.GetSignals();
-    bool bSignalPeak=false;
+    zsFlags.clear();
+    zsFlags.resize(bunchLength, false);
+    SignalBufferZeroSuppression(signals, bunchLength, threshold, mBaselineshift, [&] (unsigned pos) {zsFlags[pos]=true;});
     for (Int_t i=0; i<bunchLength; i++) {
+      // TODO: make signal range a configurable option of the class to
+      // replace the explicit number
       assert(signals[i]<1024);
       if (signals[i]>=1024) {
 	std::cout << "invalid signal value " << signals[i] << std::endl;
       }
 
+      // originalSignal is baseline corrected and used as initial value in the
+      // timebin of the channel buffer, if timebin does not yet contain a
+      // valid signal; currentSignal is zero suppressed and added if there
+      // is already a valid signal
       unsigned currentSignal=signals[i];
       unsigned originalSignal=signals[i];
 
-      // ZS
-      if (threshold!=VOID_SIGNAL) {
-	if (!bSignalPeak && currentSignal>threshold &&
-	    i+1<bunchLength && signals[i+1]>threshold) {
-	  // signal peak starts at two consecutive signals over threshold
-	  bSignalPeak=true;
-	} else if (bSignalPeak && currentSignal>threshold) {
-	  // signal belonging to active signal peak
-	} else if (bSignalPeak && currentSignal<=threshold) {
-	  if ((i+1<bunchLength && signals[i+1]>threshold) ||
-	      (i+2<bunchLength && signals[i+2]>threshold)) {
-	    // signal below threshold after peak, merged if next or
-	    // next to next signal over threshold
-	    // two signal peaks intercepted by one or two consecutive
-	    // signals below threshold are merged
-	  } else {
-	    // signal below threshold after peak
-	    bSignalPeak=false;
-	    currentSignal=0;
-	  }
-	} else {
-	  // suppress signal
-	  currentSignal=0;;
-	}
+      if (zsFlags[i]) {
+	// true indicates signal to be suppressed
+	currentSignal=0;;
       }
-      // subtract baseline
+
+      // subtract baseline from the actual raw signal
+      // baseline is pedestal lowered by the configured baselineshift
       if (originalSignal<baseline) originalSignal=0;
       else originalSignal-=baseline;
 
+      // remove baseline and baselineshift from the signal
+      // Note the sign of baselineshift, see comment in GetThreshold
       unsigned tb=baseline;
       if (mBaselineshift<0) tb+=-mBaselineshift;
       else if ((unsigned)mBaselineshift<tb) tb-=mBaselineshift;
@@ -303,12 +295,7 @@ int ChannelMerger::AddChannel(float offset, unsigned int index, AliAltroRawStrea
       if (timebin < (int)mChannelLenght && timebin >= 0) {
 	if (mBuffer[position+timebin] == VOID_SIGNAL) {
 	  // first value in this timebin
-	  if (currentSignal==0 && mNoiseFactor >= 1) {
-	    // this value is noise base line
-	    mBuffer[position+timebin]=ManipulateNoise(originalSignal);
-	  } else {
-	    mBuffer[position+timebin]=originalSignal;
-	  }
+	  mBuffer[position+timebin]=originalSignal;
 	} else if (mBuffer[position+timebin] > MAX_ACCUMULATED_SIGNAL-currentSignal) {
 	  // range overflow
 	  assert(0); // stop here or count errors if assert disabled (NDEBUG)
@@ -322,7 +309,7 @@ int ChannelMerger::AddChannel(float offset, unsigned int index, AliAltroRawStrea
 	  mBuffer[position+timebin] = MAX_ACCUMULATED_SIGNAL;
 	  mSignalOverflowCount++;
 	} else {
-	mBuffer[position+timebin]+=currentSignal;
+	  mBuffer[position+timebin]+=currentSignal;
 	}
       } else if (timebin < 0 && (timebin + (int)mChannelLenght) >= 0) {
 	timebin += mChannelLenght;
@@ -567,8 +554,11 @@ int ChannelMerger::InitChannelBaseline(const char* filename, int baselineshift)
   int HWAddr=-1;
   int AvrgSignal=-1;
 
-  const int bufferSize=1024;
-  char buffer[bufferSize];
+  // this is just a dummy buffer to skip the read of the line
+  // TODO: this can be problematic if the line exceeds the size of the dummy buffer,
+  // check if there is a better way of doing that
+  const int dummyBufferSize=1000;
+  char dummyBuffer[dummyBufferSize];
 
   mBaselineshift=baselineshift;
   while (input.good()) {
@@ -582,7 +572,7 @@ int ChannelMerger::InitChannelBaseline(const char* filename, int baselineshift)
       mChannelBaseline[index]=AvrgSignal;
     }
     // read the rest of the line
-    input.getline(buffer, bufferSize);
+    input.getline(dummyBuffer, dummyBufferSize);
   }
   return 0;
 }
@@ -598,8 +588,9 @@ int ChannelMerger::InitAltroMapping(const char* filename)
   int Padrow=-1;
   int Pad=-1;
 
-  const int bufferSize=1024;
-  char buffer[bufferSize];
+  // see comment in function above
+  const int dummyBufferSize=1000;
+  char dummyBuffer[dummyBufferSize];
 
   while (input.good()) {
     input >> DDLNumber;
@@ -612,7 +603,7 @@ int ChannelMerger::InitAltroMapping(const char* filename)
       mChannelMappingPad[index]=Pad;
     }
     // read the rest of the line
-    input.getline(buffer, bufferSize);
+    input.getline(dummyBuffer, dummyBufferSize);
   }
 
   std::cout << "... read altro mapping for " << mChannelMappingPadrow.size() << " channel(s)" << endl;
@@ -624,6 +615,10 @@ unsigned ChannelMerger::GetThreshold() const
   unsigned threshold=mZSThreshold;
   if (threshold==VOID_SIGNAL) return threshold;
 
+  // found out after a while that the original interpretation of baselineshift
+  // is a bit counterintuitive. It can be read as: manipulate the baseline (usually
+  // defined by pedestal value) by the shift value, so a negative value reduces the
+  // baseline. It thus needs to be included in the threshold calculation.
   if (mBaselineshift<0) {
     threshold+=-mBaselineshift;
   } else if (threshold<=(unsigned)mBaselineshift) {
@@ -646,72 +641,14 @@ int ChannelMerger::CalculateZeroSuppression(bool bApply, bool bSetOccupancy)
     unsigned position=chit->second;
     position*=mChannelLenght;
     buffer_t* signalBuffer=mBuffer+position;
-    int result=SignalBufferZeroSuppression(signalBuffer, mChannelLenght, threshold, mBaselineshift, bApply?signalBuffer:NULL);
+    int result=SignalBufferZeroSuppression(signalBuffer, mChannelLenght,
+                                           threshold, mBaselineshift,
+                                           [&] (unsigned i) {mZSflags[position + i]=true;},
+                                           bApply?signalBuffer:NULL
+                                           );
     if (result>=0 && bSetOccupancy) {
       mChannelOccupancy[index] = result;
     }
-  }
-  return 0;
-}
-
-int ChannelMerger::SignalBufferZeroSuppression(ChannelMerger::buffer_t* buffer, unsigned size, unsigned threshold, int baselineshift, buffer_t* target) const
-{
-  {// additional scope to keep formatting
-    if (!buffer) return -1;
-    unsigned nFilledTimebins=0;
-    bool bSignalPeak=false;
-    for (int i=size-1; i>=0; i--) {
-      unsigned currentSignal=buffer[i];
-      if (currentSignal == VOID_SIGNAL) {
-	currentSignal=0;
-      }
-
-      if (!bSignalPeak && currentSignal>threshold &&
-	  i>=1 && buffer[i-1]>threshold && buffer[i-1]!=VOID_SIGNAL) {
-	// signal peak starts at two consecutive signals over threshold
-	bSignalPeak=true;
-      } else if (bSignalPeak && currentSignal>threshold) {
-	// signal belonging to active signal peak
-      } else if (bSignalPeak && currentSignal<=threshold) {
-	if ((i>=1 && buffer[i-1] != VOID_SIGNAL && buffer[i-1]>threshold) ||
-	    (i>=2 && buffer[i-1] != VOID_SIGNAL && buffer[i-2] != VOID_SIGNAL && buffer[i-2]>threshold)) {
-	  // signal below threshold after peak, merged if next or
-	  // next to next signal over threshold
-	  // two signal peaks intercepted by one or two consecutive
-	  // signals below threshold are merged
-	} else {
-	  // signal below threshold after peak
-	  bSignalPeak=false;
-	  currentSignal=VOID_SIGNAL;
-	}
-      } else {
-	// suppress signal
-	currentSignal=VOID_SIGNAL;
-      }
-
-      if (currentSignal != VOID_SIGNAL) {
-	if (baselineshift<0) {
-	  if ((int)currentSignal>-baselineshift) currentSignal-=-baselineshift;
-	  else currentSignal=0;
-	} else {
-	  // TODO: not sure if this makes sense
-	  currentSignal+=baselineshift;
-	}
-      }
-
-      if (target) {
-	if (buffer[i] != VOID_SIGNAL) {
-	  target[i] = currentSignal;
-	} else {
-	  target[i] = VOID_SIGNAL;
-	}
-      }
-      if (currentSignal != VOID_SIGNAL && buffer[i] != VOID_SIGNAL) {
-	nFilledTimebins++;
-      }
-    }
-
-    return nFilledTimebins;
   }
   return 0;
 }
