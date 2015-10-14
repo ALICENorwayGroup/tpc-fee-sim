@@ -249,15 +249,21 @@ int ChannelMerger::AddChannel(float offset, unsigned int index, AliAltroRawStrea
 
   position*=mChannelLenght;
   assert(position+mChannelLenght<=mBufferSize);
-  std::vector<bool> zsFlags;
+  // Note: have been trying vector<bool> as this has an optimized memory footprint
+  // by using only one bit per bool value. However, this seem to have a significant
+  // impact to running time
+  std::vector<unsigned char> zsFlags;
   while (stream.NextBunch()) {
     int startTime=stream.GetStartTimeBin();
     startTime-=offset * mChannelLenght;
     int bunchLength=stream.GetBunchLength();
     const unsigned short* signals=stream.GetSignals();
-    zsFlags.clear();
-    zsFlags.resize(bunchLength, false);
-    SignalBufferZeroSuppression(signals, bunchLength, threshold, mBaselineshift, [&] (unsigned pos) {zsFlags[pos]=true;});
+    // make the flag array using the correct size, initialization is skipped
+    // as all array members will be filled appropriately
+    zsFlags.resize(bunchLength);
+    // use a direct pointer for access to array to avoid overhead
+    unsigned char* zsFlagsPtr = &zsFlags[0];
+    SignalBufferZeroSuppression(signals, bunchLength, threshold, mBaselineshift, [&] (unsigned pos, bool v) {zsFlagsPtr[pos]=v;});
     for (Int_t i=0; i<bunchLength; i++) {
       // TODO: make signal range a configurable option of the class to
       // replace the explicit number
@@ -643,7 +649,7 @@ int ChannelMerger::CalculateZeroSuppression(bool bApply, bool bSetOccupancy)
     buffer_t* signalBuffer=mBuffer+position;
     int result=SignalBufferZeroSuppression(signalBuffer, mChannelLenght,
                                            threshold, mBaselineshift,
-                                           [&] (unsigned i) {mZSflags[position + i]=true;},
+                                           [&] (unsigned i, bool v) {mZSflags[position + i]=v;},
                                            bApply?signalBuffer:NULL
                                            );
     if (result>=0 && bSetOccupancy) {

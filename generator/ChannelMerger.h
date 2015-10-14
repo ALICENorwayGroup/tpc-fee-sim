@@ -232,7 +232,9 @@ class ChannelMerger {
    *
    * Either runs in training mode and creates the Huffman table or loops
    * over all channels and retrieves the codes for every signal and calculates
-   * possible compression from the required code length.
+   * possible compression from the required code length. Using function template
+   * has significant performance gain over using std::function.
+   *
    * @param pHuffman       instance of Huffman encoder
    * @param bTrainingMode  indicates training mode, create table from symbol occurrence
    * @param hHuffmanFactor histogram for Huffman compression factor
@@ -303,36 +305,43 @@ class ChannelMerger {
    *
    * Method does not directly change any members but works on an array of signals.
    * the corrected values can either be applied to the array or not, the occupancy
-   * (number of filled timebins) is returned.
+   * (number of filled timebins) is returned. A function can be provided as callback
+   * to set flags indicating zero suppressed signals in e.g. an array.
    * @param buffer        pointer to signal buffer
    * @param size          number of signals
    * @param threshold     ZS threshold in ADC counts
    * @param baselineshift baselineshift in ADC counts
+   * @param flagZS        lambda function to indicate zs signal (true)
    * @param target        target buffer for ZS corrected value, optional, can be equal
    *                      to original signal buffer
+   *
+   * Types:
+   * - SB   source buffer type
+   * - TB   target buffer type
+   * - F    function template, parameter types (unsigned int, bool)
    */
-  template<typename SB, typename TB>
+  template<typename SB, typename TB, typename ZSF>
   int SignalBufferZeroSuppression(const SB* buffer, unsigned size,
                                   unsigned threshold, int baselineshift,
-                                  std::function<void (unsigned i)> flagZS= [] {},
+                                  ZSF flagZS= [] {},
                                   TB* target=NULL) const;
 
   // a version with one template parameter
-  template<typename SB>
+  template<typename SB, typename ZSF>
   int SignalBufferZeroSuppression(const SB* buffer, unsigned size,
                                   unsigned threshold, int baselineshift,
-                                  std::function<void (unsigned i)> flagZS= [] {}) const
+                                  ZSF flagZS= [] {}) const
   {
     return SignalBufferZeroSuppression(buffer, size, threshold, baselineshift, flagZS, (buffer_t*)NULL);
   }
 
-  // a version without lamda callback
+  // a version without function template
   template<typename SB, typename TB>
   int SignalBufferZeroSuppression(const SB* buffer, unsigned size,
                                   unsigned threshold, int baselineshift,
                                   TB* target) const
   {
-    return SignalBufferZeroSuppression(buffer, size, threshold, baselineshift, [] (unsigned i) {}, target);
+    return SignalBufferZeroSuppression(buffer, size, threshold, baselineshift, [] (unsigned i, bool v) {}, target);
   }
 
   /*
@@ -378,10 +387,10 @@ class ChannelMerger {
 const ChannelMerger::buffer_t VOID_SIGNAL=~(ChannelMerger::buffer_t)(0);
 const ChannelMerger::buffer_t MAX_ACCUMULATED_SIGNAL=VOID_SIGNAL-1;
 
-template<typename SB, typename TB>
+template<typename SB, typename TB, typename ZSF>
 int ChannelMerger::SignalBufferZeroSuppression(const SB* buffer, unsigned size,
                                                unsigned threshold, int baselineshift,
-                                               std::function<void (unsigned i)> flagZS,
+                                               ZSF flagZS,
                                                TB* target) const
 {
   if (!buffer) return -1;
@@ -437,9 +446,10 @@ int ChannelMerger::SignalBufferZeroSuppression(const SB* buffer, unsigned size,
     }
     if (currentSignal != VOID_SIGNAL && buffer[i] != VOID_SIGNAL) {
       nFilledTimebins++;
+      flagZS(i, false);
     } else {
       // flag the timebin as zero suppressed via the provided function
-      flagZS(i);
+      flagZS(i, true);
     }
   }
 
