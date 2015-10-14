@@ -276,6 +276,63 @@ class ChannelMerger {
 
   typedef unsigned short buffer_t;
 
+  /**
+   * Get list of channel indices
+   */
+  std::vector<unsigned int> GetChannelIndices() const {
+    std::vector<unsigned int> list;
+    for (const auto chit : mChannelPositions) {
+      list.push_back(chit.first);
+    }
+    return list;
+  }
+
+  /**
+   * Get signal buffer and other properties for channel of specified index
+   */
+  const buffer_t* GetChannel(unsigned int index,
+                             unsigned int& size,
+                             int& padrow,
+                             int& pad,
+                             float& occupancy
+                             ) const {
+    const auto chit = mChannelPositions.find(index);
+    if (chit == mChannelPositions.end()) return NULL;
+    unsigned position=chit->second;
+    position*=mChannelLenght;
+    if (position + mChannelLenght > mBufferSize) return NULL;
+    size=mChannelLenght;
+
+    const auto padrowit = mChannelMappingPadrow.find(index);
+    if (padrowit != mChannelMappingPadrow.end())
+      padrow = padrowit->second;
+
+    const auto padit = mChannelMappingPad.find(index);
+    if (padit != mChannelMappingPad.end())
+      pad = padit->second;
+
+    const auto occupancyit = mChannelOccupancy.find(index);
+    if (occupancyit != mChannelOccupancy.end())
+      occupancy = occupancyit->second;
+
+    return mBuffer + position;
+  }
+
+  const buffer_t* GetChannelBuffer(unsigned int index, unsigned int& size) const {
+    int padrow = -1; int pad = -1; float occupancy = -1.;
+    return GetChannel(index, size, padrow, pad, occupancy);
+  }
+
+  /**
+   * Get occupancy for channel of specified index
+   */
+  float GetChannelOccupancy(unsigned int index) const {
+    const auto chit = mChannelOccupancy.find(index);
+    if (chit == mChannelOccupancy.end()) return -1.;
+    float occupancy = chit->second;
+    return occupancy / mChannelLenght;
+  }
+
  protected:
 
  private:

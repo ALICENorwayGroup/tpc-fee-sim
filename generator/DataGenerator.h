@@ -145,7 +145,33 @@ namespace TPC {
      */
     int AnalyzeTimeframe(TTree& target, const char* statfilename=NULL);
 
+    /**
+     * Get list of channel indices in the current frame
+     *
+     * Index is buid out of ddl no shifted by 16 and hardware address of the
+     * channel: (ddlno << 16) | hwaddr
+     */
     const std::vector<float>& GetCollisionTimes() const {return mCollisionTimes;}
+
+    /**
+     * Get list of channel indices
+     */
+    std::vector<unsigned int> GetChannelIndices() const;
+
+    struct ChannelDesc_t {
+      const unsigned short* ptr;       // pointer to signals
+      unsigned int          size;      // number of signals
+      int                   padrow;    // padrow no if mapping available
+      int                   pad;       // pad no if mapping available
+      float                 occupancy; // occupancy ratio 0. to 1.
+
+      ChannelDesc_t() : ptr(NULL), size(0), padrow(-1), pad(-1), occupancy(-1.) {}
+    };
+
+    /**
+     * Get descriptor of channel with specified index
+     */
+    ChannelDesc_t GetChannelDescriptor(unsigned int index) const;
 
     /**
      * Evaluate Huffman compression

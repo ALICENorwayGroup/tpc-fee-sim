@@ -246,6 +246,29 @@ int DataGenerator::WriteSystemcDataFormat(const char* targetdir, const char* pre
     });
 }
 
+std::vector<unsigned int> DataGenerator::GetChannelIndices() const
+{
+  // Get list of channel indices from channel merger
+  std::vector<unsigned int> list;
+  if (!mChannelMerger) return list;
+  return mChannelMerger->GetChannelIndices();
+}
+
+DataGenerator::ChannelDesc_t DataGenerator::GetChannelDescriptor(unsigned int index) const
+{
+  // Get descriptor of channel with specified index
+  ChannelDesc_t desc;
+  if (!mChannelMerger) return desc;
+  desc.ptr = mChannelMerger->GetChannel(index,
+                                        desc.size,
+                                        desc.padrow,
+                                        desc.pad,
+                                        desc.occupancy
+                                        );
+  desc.occupancy = mChannelMerger->GetChannelOccupancy(index);
+  return desc;
+}
+
 int DataGenerator::AnalyzeTimeframe(TTree& target, const char* statfilename)
 {
   // Analyze data of the timeframe
