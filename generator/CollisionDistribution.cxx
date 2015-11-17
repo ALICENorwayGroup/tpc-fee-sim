@@ -21,12 +21,12 @@
 #include <iostream>
 #include <chrono>
 
-CollisionDistribution::CollisionDistribution(float rate)
+CollisionDistribution::CollisionDistribution(float rate, int seed)
   : mFramesize(1.0)
   , mRate(rate)
   , mOffset(0.)
   , mCollisionTimes()
-  , mSeed(std::chrono::system_clock::now().time_since_epoch().count())
+  , mSeed(seed>=0?seed:(std::chrono::system_clock::now().time_since_epoch().count()))
   , mGenerator(mSeed)
   , mDistribution(mRate)
 {

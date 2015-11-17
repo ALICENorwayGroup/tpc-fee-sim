@@ -36,8 +36,9 @@ class GeneratorTF {
  public:
   /** standard constructor
    *  @param rate     normalized rate
+   *  @param seed     seed for random generator, created from timestamp if -1
    */
-  GeneratorTF(float rate);
+  GeneratorTF(float rate, int seed = -1);
   /// destructor
   ~GeneratorTF();
 

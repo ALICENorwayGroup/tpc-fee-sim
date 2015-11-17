@@ -19,8 +19,8 @@
 #include "CollisionDistribution.h"
 #include <iostream>
 
-GeneratorTF::GeneratorTF(float rate)
-  : mDistribution(new CollisionDistribution(rate))
+GeneratorTF::GeneratorTF(float rate, int seed)
+  : mDistribution(new CollisionDistribution(rate, seed))
 {
 }
 

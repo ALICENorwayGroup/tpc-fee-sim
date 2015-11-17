@@ -44,8 +44,9 @@ class CollisionDistribution {
  public:
   /** standard constructor
    *  @param rate     normalized rate
+   *  @param seed     seed for random generator, created from timestamp if -1
    */
-  CollisionDistribution(float rate);
+  CollisionDistribution(float rate, int seed = -1);
   /// destructor
   ~CollisionDistribution();
 
