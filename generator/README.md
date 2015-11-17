@@ -21,6 +21,7 @@ and suggestions.
 ## Code/Classes
 Class/Macro                        | Description
 -----------------------            | -----------
+ `DataGenerator`                   | Main class
  `CollisionDistribution`           | Implementation of the distribution of collision times
  `GeneratorTF`                     | Generator for a sequence of collisions in a timeframe
  `ChannelMerger`                   | Merger for raw data of TPC channels
@@ -79,7 +80,7 @@ The ASCII text file has the following format:
 The first three columns are relevant, further columns are simply ignored.
 
 Pedestal configuration can be created using the helper macro
-`create-pedestal-configuration.C, see this macro for detailed instructions.
+[`create-pedestal-configuration.C`](create-pedestal-configuration.C), see this macro for detailed instructions.
 ```
 root -b -q -l create-pedestal-configuration.C
 ```
@@ -145,6 +146,13 @@ maxpadrow                    | -1   | range of padrows max, use -1 to disable se
 - if the generation of pedestal configuration fails with an `assert`, this indicates an
   excess of the available range. **Fix:** reduce the number of collisions to be used in the
   signal accumulation
+- `create-pedestal-configuration.C` aborts processing if number of events (input files) is not
+  sufficient for the specified number of events to be accumulated, the warning message is
+  somehow hidden in the log messages
+- the baseline shift needs to be smaller than the pedestal value of the channel, the zero
+  suppression does not work properly otherwise
+- simulation of common mode effect is only possible for one readout chanmber, make sure that
+  that the corresponding DDLs are specified. There is no additional consistency check.
 
-No more known issues, please open a ticket (issue) on
+Found a new issue? Have a feature request? Please open a ticket (issue) on
 [github](https://github.com/ALICENorwayGroup/tpc-fee-sim/issues) if you encounter problems.
