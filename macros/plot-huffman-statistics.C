@@ -29,7 +29,11 @@
 #include "TSystem.h"
 #include "TProfile.h"
 
-void formatHuffmanFactorVsOccupancy(TH1& h, const char* type = "");
+void formatDerivedPlot(TH1& h,
+                       const char* name = NULL,
+                       const char* xtitle = NULL,
+                       const char* ytitle = NULL,
+                       const char* type = "");
 
 struct dataset_t {
   int  type;
@@ -47,12 +51,12 @@ struct datadefinition_t {
 
 template<typename T>
 T* project(T*,
-	   TTree& tree,
-	   const char* name,
-	   const char* expr,
-	   const char* cut = "",
-	   const char* option = ""
-	   )
+           TTree& tree,
+           const char* name,
+           const char* expr,
+           const char* cut = "",
+           const char* option = ""
+           )
 {
   tree.Project(name, expr, cut, option, tree.GetEntries(), 0);
   TObject* obj = gDirectory->Get(name);
@@ -126,6 +130,8 @@ void plot_huffman_statistics()
     if (dataset.hOccupancy) histograms.Add(dataset.hOccupancy);
     if (dataset.hHuffmanFactorVsPadrow) histograms.Add(dataset.hHuffmanFactorVsPadrow);
     if (dataset.hOccupancyVsPadrow) histograms.Add(dataset.hOccupancyVsPadrow);
+
+    delete tree;
   }
 
   ///////////////////////////////////////////////////////////////////////////
@@ -177,6 +183,7 @@ void plot_huffman_statistics()
   histograms.Write();
 
   nTypes++;
+  std::vector<TProfile*> hoccvspadrow(nTypes, NULL);
   std::vector<TProfile*> hfvsocc(nTypes, NULL);
 
   for (int itype = 0; itype < nTypes; itype++) {
@@ -186,50 +193,85 @@ void plot_huffman_statistics()
     selection.Form("Type==%d && Occupancy>0.", itype);
     hfvsocc[itype] = project((TProfile*)NULL, *datatree, histoname.Data(), "huffmanfactor:100*Occupancy", selection.Data(), "prof");
     if (hfvsocc[itype]) {
-      formatHuffmanFactorVsOccupancy(*hfvsocc[itype]);
-      hfvsocc[itype]->SetErrorOption();
+      formatDerivedPlot(*hfvsocc[itype],
+                        "Huffman Compression vs. Occupancy",
+                        "Occupancy [%]",
+                        "Huffman factor"
+                        );
       hfvsocc[itype]->Write();
+    }
+    histoname.Form("hOccupancyVsPadrow_%d", itype);
+    selection.Form("Type==%d && Occupancy>0.", itype);
+    hoccvspadrow[itype] = project((TProfile*)NULL, *datatree, histoname.Data(), "100*Occupancy:Row", selection.Data(), "prof");
+    if (hoccvspadrow[itype]) {
+      formatDerivedPlot(*hoccvspadrow[itype],
+                        "Occupancy vs. Padrow",
+                        "Padrow",
+                        "Occupancy [%]"
+                        );
+      hoccvspadrow[itype]->Write();
     }
   }
 
   // step 3: combine plots in a canvas
   int firstcolor = 1;
   TCanvas c1("ccompilation", "Huffman Compression vs. Occupancy");
+  TCanvas c2("coccupancy", "Occupancy vs Padrow");
   TLegend *legend = new TLegend(.3,.3,.7,.6);
   legend->SetBorderSize(0);
   legend->SetTextSize(.035);
-  c1.cd();
   bool drawSame = false;
   for (int itype = 0; itype < nTypes; itype++) {
     if (hfvsocc[itype]) {
+      c1.cd();
       hfvsocc[itype]->SetLineColor(itype + firstcolor);
       hfvsocc[itype]->SetMarkerColor(itype + firstcolor);
+      hfvsocc[itype]->SetErrorOption();
       hfvsocc[itype]->Draw(drawSame?"same":"");
-      drawSame = true;
       legend->AddEntry(hfvsocc[itype], typeNames[itype], "lp");
+
+      c2.cd();
+      hoccvspadrow[itype]->SetLineColor(itype + firstcolor);
+      hoccvspadrow[itype]->SetMarkerColor(itype + firstcolor);
+      hoccvspadrow[itype]->SetErrorOption();
+      hoccvspadrow[itype]->Draw(drawSame?"same":"");
+      drawSame = true;
     }
-  }  
+  }
+  c1.cd();
+  legend->Draw();
+  c2.cd();
   legend->Draw();
 
   output.cd();
   c1.Write();
+  c2.Write();
   output.Close();
 }
 
-void formatHuffmanFactorVsOccupancy(TH1& h, const char* type)
+void formatDerivedPlot(TH1& h,
+                       const char* name,
+                       const char* xtitle,
+                       const char* ytitle,
+                       const char* type
+                       )
 {
-  TString name("Huffman Compression vs. Occupancy");
-  if (type) {
-    name += " ("; name += type; name += ")";
+  if (name) {
+    TString histoname(name);
+    if (type) {
+      histoname += " ("; histoname += type; histoname += ")";
+    }
+    h.SetTitle(histoname);
   }
-  h.SetTitle("Huffman Compression vs. Occupancy");
   h.SetLineColor(1);
-  h.GetXaxis()->SetTitle("Occupancy [%]");
+  if (xtitle)
+    h.GetXaxis()->SetTitle(xtitle);
   h.GetXaxis()->SetLabelFont(42);
   h.GetXaxis()->SetLabelSize(0.045);
   h.GetXaxis()->SetTitleSize(0.045);
   h.GetXaxis()->SetTitleFont(42);
-  h.GetYaxis()->SetTitle("Huffman factor");
+  if (ytitle)
+    h.GetYaxis()->SetTitle(ytitle);
   h.GetYaxis()->SetLabelFont(42);
   h.GetYaxis()->SetLabelSize(0.045);
   h.GetYaxis()->SetTitleSize(0.045);
