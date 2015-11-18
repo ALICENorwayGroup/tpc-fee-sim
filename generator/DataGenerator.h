@@ -115,6 +115,14 @@ namespace TPC {
 
     /**
      * Apply simulation of the common mode effect
+     *
+     * This simulates the common mode effect for a readout chamber. The signal
+     * in a channel induces a negative signal on all other channels of the
+     * same readout chamber. The induced signal is scaled by the number of
+     * channels.
+     *
+     * Occupancy value is calculated before adding the effect in order to
+     * ensure a stable reference.
      */
     void SetApplyCommonModeEffect(bool ApplyCommonModeEffect) {mApplyCommonModeEffect = ApplyCommonModeEffect;}
 

@@ -183,13 +183,21 @@ int DataGenerator::SimulateFrame()
     mChannelMerger->Normalize(mergedCollisions);
   }
 
-  // apply the common mode effect simulation
-  if (mApplyCommonModeEffect>0)
-    mChannelMerger->ApplyCommonModeEffect();
-
   // always calculate zero suppression to estimate occupancy
-  // apply if configured
-  mChannelMerger->CalculateZeroSuppression(mApplyZeroSuppression);
+  // apply if configured and common mode effect is off
+  mChannelMerger->CalculateZeroSuppression(mApplyZeroSuppression && !mApplyCommonModeEffect);
+
+  // apply the common mode effect simulation
+  if (mApplyCommonModeEffect>0) {
+    mChannelMerger->ApplyCommonModeEffect();
+    if (mApplyZeroSuppression) {
+      // zero suppression has been delayed until now, apply to the buffer
+      // but keep the already calculated occupancy as stable reference
+      bool bApply = true;
+      bool bSetOccupancy = false;
+      mChannelMerger->CalculateZeroSuppression(bApply, bSetOccupancy);
+    }
+  }
 
   if (mChannelMerger->GetSignalOverflowCount() > 0) {
     std::cout << "signal overflow in current timeframe detected" << std::endl;
