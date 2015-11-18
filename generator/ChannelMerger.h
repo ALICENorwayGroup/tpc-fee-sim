@@ -32,6 +32,7 @@ class TFolder;
 class TH1;
 class TH2;
 class AliHLTHuffman;
+class TRandom3;
 
 /**
  * @class ChannelMerger
@@ -196,6 +197,10 @@ class ChannelMerger {
    * @param factor     scaling factor for noise signals
    */
   void InitNoiseManipulation(unsigned factor) {mNoiseFactor = factor; }
+
+  void InitGainVariation(float gausMean, float gausSigma, int seed = 42);
+
+  void ApplyGainVariation();
 
   /**
    * Get threshold used for zero suppression
@@ -441,6 +446,7 @@ class ChannelMerger {
   std::vector<bool> mZSflags;
   std::map<unsigned int, unsigned int> mChannelPositions;
   std::map<unsigned int, unsigned int> mChannelBaseline;
+  std::map<unsigned int, float> mChannelGainVariation;
   std::map<unsigned int, unsigned int> mChannelMappingPadrow;
   std::map<unsigned int, unsigned int> mChannelMappingPad;
   std::map<unsigned int, int> mChannelOccupancy;
@@ -460,6 +466,7 @@ class ChannelMerger {
   unsigned mNoiseFactor;
 
   TFolder* mChannelHistograms;
+  TRandom3* mRnd;
 };
 
 const ChannelMerger::buffer_t VOID_SIGNAL=~(ChannelMerger::buffer_t)(0);

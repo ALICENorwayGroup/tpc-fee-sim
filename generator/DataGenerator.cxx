@@ -40,6 +40,9 @@ DataGenerator::DataGenerator(int overlayMode)
   , mNormalizeChannels(false)
   , mApplyCommonModeEffect(false)
   , mApplyZeroSuppression(false)
+  , mApplyGainVariation(false)
+  , mGainVariationGausSigma(0)
+  , mGainVariationGausMean(0)
   , mAsciiTargetDir()
   , mAsciiPrefix()
   , mSystemcTargetDir()
@@ -93,7 +96,8 @@ int DataGenerator::Init(float rate, const char* inputconfig)
     mChannelMerger->SetDDLRange(mDDLmin, mDDLmax);
   if (mPadrowMin>=0 && mPadrowMax>=0)
     mChannelMerger->SetPadRowRange(mPadrowMin, mPadrowMax);
-
+  if (mGainVariationGausMean > 0)
+    mChannelMerger->InitGainVariation(mGainVariationGausMean, mGainVariationGausSigma);
 
   mNofSimulatedFrames = 0;
   return 0;
@@ -186,6 +190,10 @@ int DataGenerator::SimulateFrame()
   // always calculate zero suppression to estimate occupancy
   // apply if configured and common mode effect is off
   mChannelMerger->CalculateZeroSuppression(mApplyZeroSuppression && !mApplyCommonModeEffect);
+
+  // apply the gain variations
+  if (mApplyGainVariation>0)
+    mChannelMerger->ApplyGainVariation();
 
   // apply the common mode effect simulation
   if (mApplyCommonModeEffect>0) {

@@ -25,10 +25,12 @@
 #include "TFolder.h"
 #include "TH1F.h"
 #include "TH2F.h"
+#include "TRandom3.h"
 #include <iomanip>
 #include <assert.h>
 #include <fstream>
 #include <cstdlib>
+#include <chrono>
 
 ChannelMerger::ChannelMerger()
   : mChannelLenght(1024)
@@ -39,6 +41,7 @@ ChannelMerger::ChannelMerger()
   , mZSflags()
   , mChannelPositions()
   , mChannelBaseline()
+  , mChannelGainVariation()
   , mChannelMappingPadrow()
   , mChannelMappingPad()
   , mChannelOccupancy()
@@ -53,6 +56,7 @@ ChannelMerger::ChannelMerger()
   , mMaxPadRow(-1)
   , mNoiseFactor(0)
   , mChannelHistograms(new TFolder("ChannelHistograms", "ChannelHistograms"))
+  , mRnd(nullptr)
 {
   if (mChannelHistograms) mChannelHistograms->IsOwner();
 }
@@ -70,6 +74,7 @@ ChannelMerger::~ChannelMerger()
     mChannelHistograms->SaveAs("ChannelHistograms.root");
     delete mChannelHistograms;
   }
+  delete mRnd;
 }
 
 int ChannelMerger::MergeCollisions(std::vector<float> collisiontimes, std::istream& inputfiles)
@@ -973,6 +978,59 @@ unsigned ChannelMerger::ManipulateNoise(unsigned signal) const
   if (mBaselineshift<0 && noisesignal >= -mBaselineshift * (factor - 1))
     noisesignal -= -mBaselineshift * (factor - 1);
   return noisesignal;
+}
+
+void ChannelMerger::InitGainVariation(float gausMean, float gausSigma, int seed)
+{
+  if (!mRnd) {
+    if (seed < 0) seed = std::chrono::system_clock::now().time_since_epoch().count();
+    mRnd = new TRandom3(seed);
+    if (!mRnd) return;
+    // just generate some random numbers to ensure a proper initialized
+    // of the Mersenne Twister array, the number is in accordance with literature
+    for (int i = 0; i < 800000; i++) mRnd->Rndm();
+  }
+
+  for (std::map<unsigned int, unsigned int>::const_iterator chit=mChannelBaseline.begin();
+       chit!=mChannelBaseline.end(); chit++) {
+    unsigned index=chit->first;
+    mChannelGainVariation[index] = mRnd->Gaus(gausMean,gausSigma);
+  }
+}
+
+void ChannelMerger::ApplyGainVariation()
+{
+  if (!mRnd) {
+    std::cerr << "ApplyGainVariation error: random generator not initialized" << std::endl;
+    return;
+  }
+  for (std::map<unsigned int, unsigned int>::const_iterator chit=mChannelPositions.begin();
+       chit!=mChannelPositions.end(); chit++) {
+    unsigned index = chit->first;
+    unsigned position=chit->second;
+    position*=mChannelLenght;
+    buffer_t* signalBuffer=mBuffer+position;
+    float factor = mChannelGainVariation[index];
+
+    for (int i=mChannelLenght-1; i>=0; i--) {
+      unsigned currentSignal=signalBuffer[i];
+      if (currentSignal == VOID_SIGNAL) continue;
+
+      // since the signal was truncated before (stored as integer), it could be
+      // in reality some value up to + <1
+      float offset = mRnd->Rndm();
+      // ensure that the offset is really < 1
+      while (offset >= 1.0) offset = mRnd->Rndm();
+
+      float signal = currentSignal + offset;
+
+      // mutliply the gain variation factor
+      signal *= factor;
+
+      // store it
+      signalBuffer[i] = (unsigned)signal;
+    }
+  }
 }
 
 #ifdef __cplusplus

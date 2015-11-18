@@ -139,6 +139,16 @@ namespace TPC {
     void SetApplyZeroSuppression(bool ApplyZeroSuppression) {mApplyZeroSuppression = ApplyZeroSuppression;}
 
     /**
+     * Initialize gain variation
+     */
+    void InitGainVariation(float GausMean = 1, float GausSigma = 0.1) { mGainVariationGausMean = GausMean; mGainVariationGausSigma = GausSigma;};
+
+    /**
+     * Apply simulation of gain variation
+     */
+    void SetApplyGainVariation(bool ApplyGainVariation) {mApplyGainVariation = ApplyGainVariation;};
+
+    /**
      * Enable writing of timeframes in ASCII format
      */
     int WriteASCIIDataFormat(const char* targetdir, const char* prefix="tf");
@@ -229,6 +239,9 @@ namespace TPC {
     bool mNormalizeChannels;
     bool mApplyCommonModeEffect;
     bool mApplyZeroSuppression;
+    bool mApplyGainVariation;
+    float mGainVariationGausSigma;
+    float mGainVariationGausMean;
 
     std::string mAsciiTargetDir;
     std::string mAsciiPrefix;
