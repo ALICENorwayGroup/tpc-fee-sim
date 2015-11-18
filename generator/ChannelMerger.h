@@ -345,6 +345,11 @@ class ChannelMerger {
   int GrowBuffer(unsigned newsize);
 
   /**
+   * Calculate initial buffer size depending on the DDL range
+   */
+  int CalculateInitialBufferSize() const;
+
+  /**
    * Add data of a channel to buffer.
    *
    * Sampled data of the channel is shifted by offset towards zero. Underflow

@@ -32,7 +32,7 @@
 
 ChannelMerger::ChannelMerger()
   : mChannelLenght(1024)
-  , mInitialBufferSize(600000 * mChannelLenght * sizeof(buffer_t))
+  , mInitialBufferSize(0)
   , mBufferSize(0)
   , mBuffer(NULL) // TODO change to nullptr when moving to c++11
   , mUnderflowBuffer(NULL) // TODO change to nullptr when moving to c++11
@@ -185,6 +185,29 @@ int ChannelMerger::GrowBuffer(unsigned newsize)
   return 0;
 }
 
+int ChannelMerger::CalculateInitialBufferSize() const
+{
+  const int maxNPartiions = 72;
+  const int nChannelsPerPartition = 2500;
+
+  // non-const pointer for the bounds check
+  ChannelMerger* ncthis = const_cast<ChannelMerger*>(this);
+  if (mInputStreamMaxDDL < 0 || mInputStreamMaxDDL > maxNPartiions) {
+    // set to default
+    ncthis->mInputStreamMaxDDL = maxNPartiions;
+  }
+  if (mInputStreamMinDDL < 0) {
+    // set to default
+    ncthis->mInputStreamMinDDL = 0;
+  }
+  if (mInputStreamMinDDL > mInputStreamMaxDDL)
+    ncthis->mInputStreamMinDDL = mInputStreamMaxDDL;
+
+  unsigned nPartitions = mInputStreamMaxDDL - mInputStreamMinDDL;
+  if (nPartitions == 0) nPartitions = 1;
+  return nChannelsPerPartition * nPartitions * mChannelLenght * sizeof(buffer_t);
+}
+
 int ChannelMerger::StartTimeframe()
 {
   // start a new timeframe
@@ -236,6 +259,8 @@ int ChannelMerger::AddChannel(float offset, unsigned int index, AliAltroRawStrea
   unsigned reqsize=position + 1; // need space for one channel starting at position
   reqsize *= mChannelLenght * sizeof(buffer_t);
   if (reqsize > mBufferSize) {
+    if (mInitialBufferSize == 0)
+      mInitialBufferSize = CalculateInitialBufferSize();
     unsigned newsize=0;
     if (mBufferSize == 0 && reqsize < mInitialBufferSize) {
       newsize = mInitialBufferSize;
