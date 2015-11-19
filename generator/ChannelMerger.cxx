@@ -345,13 +345,8 @@ int ChannelMerger::AddChannel(float offset, unsigned int index, AliAltroRawStrea
       } else if (timebin < 0 && (timebin + (int)mChannelLenght) >= 0) {
 	timebin += mChannelLenght;
 	if (mUnderflowBuffer[position+timebin] == VOID_SIGNAL) {
-	  // first value in this timebin
-	  if (currentSignal==0 && mNoiseFactor >= 1) {
-	    // this value is noise base line
-	    mUnderflowBuffer[position+timebin]=ManipulateNoise(originalSignal);
-	  } else {
-	    mUnderflowBuffer[position+timebin]=originalSignal;
-	  }
+          // first value in this timebin
+          mUnderflowBuffer[position+timebin]=originalSignal;
 	} else if (mUnderflowBuffer[position+timebin] > MAX_ACCUMULATED_SIGNAL-currentSignal) {
 	  // range overflow
 	  mUnderflowBuffer[position+timebin] = MAX_ACCUMULATED_SIGNAL;
