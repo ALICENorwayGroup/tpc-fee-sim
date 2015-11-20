@@ -586,6 +586,9 @@ int ChannelMerger::InitChannelBaseline(const char* filename, int baselineshift)
   const int dummyBufferSize=1000;
   char dummyBuffer[dummyBufferSize];
 
+  // Note: the code has been tested only with negative and zero baslineshift,
+  // meaning that the pedestal value to be subtracted is reduced
+  assert(baselineshift <=0 );
   mBaselineshift=baselineshift;
   while (input.good()) {
     input >> DDLNumber;
@@ -916,16 +919,12 @@ int ChannelMerger::ApplyCommonModeEffect(int scalingFactor)
   // temporary buffer for calculation of ZS for one channel
   std::vector<buffer_t> zsSignal(mChannelLenght, 0);
   // 1. loop over all channels and sum ZS signals in each timebin
-  for (std::map<unsigned int, unsigned int>::const_iterator chit=mChannelPositions.begin();
-       chit!=mChannelPositions.end(); chit++) {
-    unsigned position=chit->second;
+  for (const auto chit : mChannelPositions) {
+    unsigned position=chit.second;
     position*=mChannelLenght;
-    buffer_t* signalBuffer=mBuffer+position;
-    int result=SignalBufferZeroSuppression(signalBuffer, mChannelLenght, GetThreshold(), mBaselineshift, &zsSignal[0]);
-    if (result < 0) return result;
     for (unsigned i=0; i<mChannelLenght; ++i) {
-      if (zsSignal[i] == VOID_SIGNAL) continue;
-      cmSignal[i]+=zsSignal[i];
+      if (mZSflags[position + i]) continue; // this is noise
+      cmSignal[i] += CorrectBaselineshift(mBuffer[position + i], mBaselineshift);
     }
   }
 
@@ -934,22 +933,16 @@ int ChannelMerger::ApplyCommonModeEffect(int scalingFactor)
   // 2. subtract scaled (sum - current channel) from current channel
   unsigned nUnderflow=0;
   unsigned nUnderflowChannels=0;
-  for (std::map<unsigned int, unsigned int>::const_iterator chit=mChannelPositions.begin();
-       chit!=mChannelPositions.end(); chit++) {
-    unsigned position=chit->second;
+  for (const auto chit : mChannelPositions) {
+    unsigned position=chit.second;
     position*=mChannelLenght;
     bool bHaveUnderflow=false;
-    buffer_t* signalBuffer=mBuffer+position;
-    int result=SignalBufferZeroSuppression(signalBuffer, mChannelLenght, GetThreshold(), mBaselineshift, &zsSignal[0]);
-    if (result < 0) return result;
     for (unsigned i=0; i<mChannelLenght; ++i) {
       unsigned int cmImpact=cmSignal[i];
-      if (zsSignal[i] != VOID_SIGNAL) {
-	if (cmImpact > zsSignal[i]) {
-	  cmImpact -= zsSignal[i];
-	} else {
-	  cmImpact = 0;
-	}
+      if (mZSflags[position + i]) {
+        // subtract this channel from the sum
+        buffer_t signal = CorrectBaselineshift(mBuffer[position + i], mBaselineshift);
+        cmImpact = (cmImpact > signal)?cmImpact - signal:0;
       }
       cmImpact/=scalingFactor;
       if (mBuffer[position + i] < cmImpact) {

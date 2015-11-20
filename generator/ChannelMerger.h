@@ -416,6 +416,22 @@ class ChannelMerger {
     return InitNextInputFile(inputfiles);
   }
 
+  /**
+   * Correct signal for baselineshift
+   * Baseline can be shifted to a fixed value after subtraction of pedestal,
+   * negative sign of the baselineshift parameter increases the baseline.
+   * The signal after ZS has needs to be corrected for this shift.
+   */
+  buffer_t CorrectBaselineshift(buffer_t signal, int baselineshift) const {
+    // Note the sign of baselineshift, see comment in GetThreshold
+    if (baselineshift<0) {
+      baselineshift *= -1;
+      if (signal>baselineshift) return signal-baselineshift;
+      return 0;
+    }
+    return signal+baselineshift;
+  }
+
   unsigned mChannelLenght;
   unsigned mInitialBufferSize;
   unsigned mBufferSize;
@@ -459,7 +475,7 @@ int ChannelMerger::SignalBufferZeroSuppression(const SB* buffer, unsigned size,
   unsigned nFilledTimebins=0;
   bool bSignalPeak=false;
   for (int i=size-1; i>=0; i--) {
-    unsigned currentSignal=buffer[i];
+    buffer_t currentSignal=buffer[i];
     if (currentSignal == VOID_SIGNAL) {
       currentSignal=0;
     }
@@ -489,14 +505,7 @@ int ChannelMerger::SignalBufferZeroSuppression(const SB* buffer, unsigned size,
 
     if (currentSignal != VOID_SIGNAL) {
       // finally remove the baselineshift from the remaining signals
-      // Note the sign of baselineshift, see comment in GetThreshold
-      if (baselineshift<0) {
-        if ((int)currentSignal>-baselineshift) currentSignal-=-baselineshift;
-        else currentSignal=0;
-      } else {
-        // TODO: not sure if this makes sense
-        currentSignal+=baselineshift;
-      }
+      currentSignal = CorrectBaselineshift(currentSignal, mBaselineshift);
     }
 
     if (target) {
