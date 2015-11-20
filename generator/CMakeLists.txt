@@ -16,6 +16,7 @@ set(SOURCES
   ${SOURCES}
   DataGenerator.cxx
   ChannelMerger.cxx
+  NoiseGenerator.cxx
 )
 endif(AliRoot_FOUND)
 

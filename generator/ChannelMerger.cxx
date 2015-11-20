@@ -16,6 +16,7 @@
 //  @brief  Various functionality for merging of TPC raw data
 
 #include "ChannelMerger.h"
+#include "NoiseGenerator.h"
 #include "AliAltroRawStreamV3.h"
 #include "AliRawReader.h"
 #include "AliHLTHuffman.h"
@@ -57,6 +58,7 @@ ChannelMerger::ChannelMerger()
   , mNoiseFactor(0)
   , mChannelHistograms(new TFolder("ChannelHistograms", "ChannelHistograms"))
   , mRnd(nullptr)
+  , mNoiseGenerator(nullptr)
 {
   if (mChannelHistograms) mChannelHistograms->IsOwner();
 }
@@ -75,6 +77,7 @@ ChannelMerger::~ChannelMerger()
     delete mChannelHistograms;
   }
   delete mRnd;
+  delete mNoiseGenerator;
 }
 
 int ChannelMerger::MergeCollisions(std::vector<float> collisiontimes, std::istream& inputfiles)
@@ -166,14 +169,20 @@ int ChannelMerger::GrowBuffer(unsigned newsize)
   // Parameter specifies new number of elements
   if (newsize <= mBufferSize) return 0;
 
+  buffer_t noiseBaseline = mBaselineshift<0?-mBaselineshift:0;
   buffer_t* lastData=mBuffer;
   mBuffer = new buffer_t[newsize];
   if (lastData) {
     memcpy(mBuffer, lastData, mBufferSize * sizeof(buffer_t));
     delete [] lastData;
   }
+  if (mNoiseGenerator) {
+    // initialize with noise
+    mNoiseGenerator->FillArray(mBuffer + mBufferSize, newsize - mBufferSize, noiseBaseline);
+  } else {
   // initialize to VOID_SIGNAL value to indicate timebins without signals
   memset(mBuffer+mBufferSize, 0xff, (newsize - mBufferSize) * sizeof(buffer_t));
+  }
 
   lastData=mUnderflowBuffer;
   mUnderflowBuffer = new buffer_t[newsize];
@@ -181,7 +190,12 @@ int ChannelMerger::GrowBuffer(unsigned newsize)
     memcpy(mUnderflowBuffer, lastData, mBufferSize * sizeof(buffer_t));
     delete [] lastData;
   }
+  if (mNoiseGenerator) {
+    // initialize with noise
+    mNoiseGenerator->FillArray(mUnderflowBuffer + mBufferSize, newsize - mBufferSize, noiseBaseline);
+  } else {
   memset(mUnderflowBuffer+mBufferSize, 0xff, (newsize - mBufferSize) * sizeof(buffer_t));
+  }
 
   mZSflags.resize(newsize, false);
 
@@ -220,8 +234,14 @@ int ChannelMerger::StartTimeframe()
   buffer_t* lastData=mBuffer;
   mBuffer=mUnderflowBuffer;
   mUnderflowBuffer=lastData;
+  if (mNoiseGenerator) {
+    // initialize with noise
+    buffer_t noiseBaseline = mBaselineshift<0?-mBaselineshift:0;
+    mNoiseGenerator->FillArray(mUnderflowBuffer, mBufferSize, noiseBaseline);
+  } else {
   // initialize to VOID_SIGNAL value to indicate timebins without signals
   if (mUnderflowBuffer) memset(mUnderflowBuffer, 0xff, mBufferSize * sizeof(buffer_t));
+  }
   mSignalOverflowCount=0;
 
   for (std::map<unsigned int, int>::iterator it=mChannelOccupancy.begin();
@@ -978,6 +998,12 @@ unsigned ChannelMerger::ManipulateNoise(unsigned signal) const
   if (mBaselineshift<0 && noisesignal >= -mBaselineshift * (factor - 1))
     noisesignal -= -mBaselineshift * (factor - 1);
   return noisesignal;
+}
+
+void ChannelMerger::InitNoiseSimulation(float width, int seed)
+{
+  if (mNoiseGenerator) delete mNoiseGenerator;
+  mNoiseGenerator = new NoiseGenerator(0., width, seed);
 }
 
 void ChannelMerger::InitGainVariation(float gausMean, float gausSigma, int seed)

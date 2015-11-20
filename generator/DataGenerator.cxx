@@ -43,6 +43,7 @@ DataGenerator::DataGenerator(int overlayMode)
   , mApplyGainVariation(false)
   , mGainVariationGausSigma(0)
   , mGainVariationGausMean(0)
+  , mNoiseLevel(-1.)
   , mAsciiTargetDir()
   , mAsciiPrefix()
   , mSystemcTargetDir()
@@ -98,6 +99,8 @@ int DataGenerator::Init(float rate, const char* inputconfig)
     mChannelMerger->SetPadRowRange(mPadrowMin, mPadrowMax);
   if (mGainVariationGausMean > 0)
     mChannelMerger->InitGainVariation(mGainVariationGausMean, mGainVariationGausSigma);
+  if (mNoiseLevel > 0.)
+    mChannelMerger->InitNoiseSimulation(mNoiseLevel);
 
   mNofSimulatedFrames = 0;
   return 0;

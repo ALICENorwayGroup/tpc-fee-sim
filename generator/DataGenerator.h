@@ -202,6 +202,11 @@ namespace TPC {
 				   unsigned symbolCutoffLength=0
 				   );
 
+    /**
+     * Set noise level for the generated timeframe
+     */
+    void SetNoiseLevel(float noiselevel) {mNoiseLevel = noiselevel;}
+
   protected:
 
   private:
@@ -242,6 +247,7 @@ namespace TPC {
     bool mApplyGainVariation;
     float mGainVariationGausSigma;
     float mGainVariationGausMean;
+    float mNoiseLevel;
 
     std::string mAsciiTargetDir;
     std::string mAsciiPrefix;

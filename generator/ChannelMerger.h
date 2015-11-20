@@ -33,6 +33,7 @@ class TH1;
 class TH2;
 class AliHLTHuffman;
 class TRandom3;
+class NoiseGenerator;
 
 /**
  * @class ChannelMerger
@@ -197,6 +198,16 @@ class ChannelMerger {
    * @param factor     scaling factor for noise signals
    */
   void InitNoiseManipulation(unsigned factor) {mNoiseFactor = factor; }
+
+  /**
+   * Init simulation of noise as start sample in each new timeframe
+   *
+   * When starting a new timeframe, random noise is generated according
+   * to the normal distribution with the specified parameters.
+   * @param width   noise width
+   * @param seed    seed for random generator, generated from timestamp if -1
+   */
+  void InitNoiseSimulation(float width, int seed = -1);
 
   void InitGainVariation(float gausMean, float gausSigma, int seed = 42);
 
@@ -467,6 +478,8 @@ class ChannelMerger {
 
   TFolder* mChannelHistograms;
   TRandom3* mRnd;
+
+  NoiseGenerator* mNoiseGenerator;
 };
 
 const ChannelMerger::buffer_t VOID_SIGNAL=~(ChannelMerger::buffer_t)(0);
