@@ -153,6 +153,8 @@ void timeframes_from_raw(const int   g_pileupmode=3, // 0 - fixed number of coll
   int NFilledTimebins=0;
   int NBunches=0;
   int BunchLength[1]; // length is dummy, different variable used for tree filling
+  float NoiseLevel=0.;
+  int NNoiseSignals=0;
   float HuffmanFactor=1.;
 
   // due to the interface design of the ChannelMerger::Analyze function we
@@ -179,6 +181,8 @@ void timeframes_from_raw(const int   g_pileupmode=3, // 0 - fixed number of coll
       // extended statistics
       channelstat->Branch("BunchLength"    , BunchLength      , "BuncheLength[NBunches]/i");
     }
+    channelstat->Branch("NoiseLevel", &NoiseLevel , "NoiseLevel/F");
+    channelstat->Branch("NNoiseSignals", &NNoiseSignals , "NNoiseSignals/I");
   }
 
   TTree *huffmanstat=NULL;

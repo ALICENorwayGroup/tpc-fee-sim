@@ -32,6 +32,7 @@
 #include <fstream>
 #include <cstdlib>
 #include <chrono>
+#include <cmath>
 
 ChannelMerger::ChannelMerger()
   : mChannelLenght(1024)
@@ -424,9 +425,11 @@ int ChannelMerger::Analyze(TTree& target, const char* statfilename)
   int MaxTimebin=0;
   int NFilledTimebins=0;
   int NBunches=0;
+  float NoiseLevel=0.;
+  int NNoiseSignals=0;
   // strangely enough, TTree::SetBranchAddress requires the
   // array to be 'unsigned int' although the branch was created with
-  // in array.
+  // int array.
   unsigned int BunchLength[mChannelLenght];
 
   if (target.GetBranch("DDLNumber") != NULL) {
@@ -481,6 +484,14 @@ int ChannelMerger::Analyze(TTree& target, const char* statfilename)
     target.SetBranchAddress("BunchLength", BunchLength);
   }
 
+  if (target.GetBranch("NoiseLevel") != NULL) {
+    target.SetBranchAddress("NoiseLevel", &NoiseLevel);
+  }
+
+  if (target.GetBranch("NNoiseSignals") != NULL) {
+    target.SetBranchAddress("NNoiseSignals", &NNoiseSignals);
+  }
+
   // statistics file setup
   std::ofstream* statfile = NULL;
   if (statfilename) {
@@ -504,10 +515,10 @@ int ChannelMerger::Analyze(TTree& target, const char* statfilename)
     currentFolder = new TFolder(name, name);
     mChannelHistograms->Add(currentFolder);
   }
-  for (std::map<unsigned int, unsigned int>::const_iterator chit=mChannelPositions.begin();
-       chit!=mChannelPositions.end(); chit++) {
-    unsigned index=chit->first;
-    unsigned position=chit->second;
+  vector<unsigned> noiseSignals;
+  for (const auto chit : mChannelPositions) {
+    unsigned index=chit.first;
+    unsigned position=chit.second;
     position*=mChannelLenght;
     DDLNumber=(index&0xffff0000)>>16;
     HWAddr=index&0x0000ffff;
@@ -537,7 +548,11 @@ int ChannelMerger::Analyze(TTree& target, const char* statfilename)
     MaxTimebin=mChannelLenght;
     NFilledTimebins=0;
     NBunches=0;
+    NoiseLevel=0.;
+    NNoiseSignals=0;
     int nBunchSamples=0;
+    float sumNoiseSignals=0.;
+    noiseSignals.clear();
     for (unsigned i=0; i<mChannelLenght; i++) {
       int signal=mBuffer[position+i];
       if (signal == VOID_SIGNAL) {
@@ -546,6 +561,11 @@ int ChannelMerger::Analyze(TTree& target, const char* statfilename)
 	  nBunchSamples=0;
 	}
 	continue;
+      }
+      if (mZSflags[position + i]) {
+        // sum for calculation of average of noise signals
+        sumNoiseSignals += signal;
+        noiseSignals.push_back(i);
       }
       if (hChannel) {
 	hChannel->Fill(i, signal);
@@ -571,6 +591,17 @@ int ChannelMerger::Analyze(TTree& target, const char* statfilename)
     }
     if (NFilledTimebins>0) {
       AvrgSignal/=NFilledTimebins;
+    }
+    NNoiseSignals=noiseSignals.size();
+    if (NNoiseSignals > 0.) {
+      sumNoiseSignals /= NNoiseSignals;
+      for (auto noiseSignalIterator : noiseSignals) {
+        float noiseSignal = mBuffer[position + noiseSignalIterator];
+        noiseSignal -= sumNoiseSignals;
+        NoiseLevel += noiseSignal * noiseSignal;
+      }
+      NoiseLevel /= NNoiseSignals;
+      NoiseLevel = sqrt(NoiseLevel);
     }
     target.Fill();
     if (statfile) {
