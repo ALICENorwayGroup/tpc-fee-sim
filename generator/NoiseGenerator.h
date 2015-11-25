@@ -49,7 +49,9 @@ int NoiseGenerator::FillArray(T* buffer, unsigned size, T offset)
   if (!buffer) return -1;
   for (unsigned i = 0; i < size; i++) {
     float value = mDistribution(mGenerator);
-    buffer[i] = (T)round(value + offset);
+    value += offset;
+    if (value < 0.) value = 0.;
+    buffer[i] = (T)round(value);
   }
 
   return 0;
