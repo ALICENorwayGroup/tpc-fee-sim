@@ -971,26 +971,36 @@ int ChannelMerger::WriteSystemcInputFile(const char* filename)
 int ChannelMerger::ApplyCommonModeEffect(int scalingFactor)
 {
   // buffer for sum of ZS signals of all channels
-  std::vector<buffer_t> cmSignal(mChannelLenght, 0);
+  std::map<int, std::vector<buffer_t> > cmSignalsPerChamber;
   // temporary buffer for calculation of ZS for one channel
   std::vector<buffer_t> zsSignal(mChannelLenght, 0);
   // 1. loop over all channels and sum ZS signals in each timebin
   for (const auto chit : mChannelPositions) {
     unsigned position=chit.second;
+    int chamberNo=GetChamberNoFromChannelIndex(chit.first);
+    if (cmSignalsPerChamber.find(chamberNo) == cmSignalsPerChamber.end()) {
+      // make array by one element bigger to have a counter for
+      // number of contributing channels
+      cmSignalsPerChamber[chamberNo].resize(mChannelLenght+1, 0);
+    }
+    std::vector<buffer_t>& cmSignal = cmSignalsPerChamber[chamberNo];
     position*=mChannelLenght;
+    // count number of contributing channels in the last element of the array
+    cmSignal[mChannelLenght] += 1;
     for (unsigned i=0; i<mChannelLenght; ++i) {
       if (mZSflags[position + i]) continue; // this is noise
       cmSignal[i] += CorrectBaselineshift(mBuffer[position + i], mBaselineshift);
     }
   }
 
-  if (scalingFactor<0) scalingFactor=mChannelPositions.size();
-
   // 2. subtract scaled (sum - current channel) from current channel
   unsigned nUnderflow=0;
   unsigned nUnderflowChannels=0;
   for (const auto chit : mChannelPositions) {
     unsigned position=chit.second;
+    int chamberNo=GetChamberNoFromChannelIndex(chit.first);
+    std::vector<buffer_t>& cmSignal = cmSignalsPerChamber[chamberNo];
+    if (scalingFactor<0) scalingFactor = cmSignal[mChannelLenght];
     position*=mChannelLenght;
     bool bHaveUnderflow=false;
     for (unsigned i=0; i<mChannelLenght; ++i) {
@@ -1011,7 +1021,11 @@ int ChannelMerger::ApplyCommonModeEffect(int scalingFactor)
       }
     }
   }
-  std::cout << "ApplyCommonModeEffect: scaling " << scalingFactor << "; " << nUnderflow << " underflow(s) in " << nUnderflowChannels << " channel(s)" << std::endl;
+  std::cout << "ApplyCommonModeEffect: " << nUnderflow << " underflow(s) in " << nUnderflowChannels << " channel(s)" << std::endl;
+  // TODO: define configurable verbosity
+  // for (auto chamberIterator : cmSignalsPerChamber) {
+  //   std::cout << "    Chamber " << std::setw(2) << chamberIterator.first << ": scaling factor " << (chamberIterator.second)[mChannelLenght] << std::endl;
+  // }
 
   return 0;
 }

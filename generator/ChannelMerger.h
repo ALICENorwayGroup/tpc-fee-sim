@@ -276,8 +276,8 @@ class ChannelMerger {
    * scaled by the number of pads.
    * Its believed that this method is just a rough simplification
    * but should be enough for estimation of data rates.
-   * @param scalingFactor  scaling factor to be applied, number of
-   *                       available channels is used if -1
+   * @param scalingFactor  scaling factor to be applied; if -1, the
+   *                       number of available channels in chamber
    */
   int ApplyCommonModeEffect(int scalingFactor = -1);
 
@@ -291,6 +291,20 @@ class ChannelMerger {
   unsigned ManipulateNoise(unsigned signal) const;
 
   typedef unsigned short buffer_t;
+
+  /**
+   * Get the corresponding chamber number for a channel index
+   *
+   * TPC has 36 IROCs mit 2 readout partitions (DDLs 0 to 71) and
+   * 36 OROCs with 4 partitions (DDLs 72 to 215)
+   */
+  int GetChamberNoFromChannelIndex(unsigned int index)
+  {
+    unsigned DDLNumber=(index&0xffff0000)>>16;
+    if (DDLNumber >= 216) return -1;
+    if (DDLNumber >= 72) return (DDLNumber-72)/4 + 36;
+    return DDLNumber/2;
+  }
 
   /**
    * Get list of channel indices
