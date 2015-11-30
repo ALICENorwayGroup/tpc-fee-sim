@@ -31,8 +31,13 @@ class NoiseGenerator {
   NoiseGenerator(float mean = 0., float sigma = 1., int seed = -1);
   ~NoiseGenerator();
 
+  template<typename T, typename Selector>
+  int FillArray(T* buffer, unsigned size, T offset, Selector selector);
+
   template<typename T>
-  int FillArray(T* buffer, unsigned type, T offset);
+  int FillArray(T* buffer, unsigned size, T offset){
+    return FillArray(buffer, size, offset, [] (unsigned) {return true;});
+  }
 
  private:
   /// seed for random generator, configured or generated from timestamp
@@ -43,11 +48,12 @@ class NoiseGenerator {
   std::normal_distribution<float> mDistribution;
 };
 
-template<typename T>
-int NoiseGenerator::FillArray(T* buffer, unsigned size, T offset)
+template<typename T, typename Selector>
+int NoiseGenerator::FillArray(T* buffer, unsigned size, T offset, Selector selector)
 {
   if (!buffer) return -1;
   for (unsigned i = 0; i < size; i++) {
+    if (!selector(i)) continue;
     float value = mDistribution(mGenerator);
     value += offset;
     if (value < 0.) value = 0.;
