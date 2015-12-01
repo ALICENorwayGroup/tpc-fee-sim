@@ -257,6 +257,43 @@ int ChannelMerger::StartTimeframe()
   return 0;
 }
 
+int ChannelMerger::FinishTimeframe(bool bApplyZeroSuppression,
+                                   bool bApplyCommonModeEffect)
+{
+  // finish timeframe by applying additional effects
+  //
+
+  // TODO: just to sketch an idea. Post processing can be implemented
+  // in an appropriate policy class
+
+  // always calculate zero suppression to estimate occupancy
+  // apply if configured and additional effects off
+  bool bPostponeZSApplication =
+    bApplyCommonModeEffect ||
+    (mChannelGainVariation.size() > 0);
+  CalculateZeroSuppression(bApplyZeroSuppression && !bPostponeZSApplication);
+
+  // apply the common mode effect simulation
+  if (bApplyCommonModeEffect) {
+    ApplyCommonModeEffect();
+  }
+
+  // apply the gain variations
+  if (mChannelGainVariation.size() > 0)
+    ApplyGainVariation();
+
+  if (bApplyZeroSuppression && bPostponeZSApplication) {
+    // zero suppression has been delayed until now, apply to the buffer
+    // but keep the already calculated occupancy as stable reference
+    // these variables are only set for better clarity of the code
+    bool bApply = true;
+    bool bSetOccupancy = false;
+    CalculateZeroSuppression(bApply, bSetOccupancy);
+  }
+
+  return 0;
+}
+
 int ChannelMerger::AddChannel(float offset, unsigned int index, AliAltroRawStreamV3& stream)
 {
   // add channel samples

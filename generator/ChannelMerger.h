@@ -87,6 +87,20 @@ class ChannelMerger {
   int StartTimeframe();
 
   /**
+   * Finish timeframe
+   *
+   * Applying configured effects in the following sequence
+   * - Occupancy calculation (always)
+   * - Common Mode Effect (according to parameter)
+   * - Noise simulation (according to initialized mode)
+   * - Gain Variation (if gain variation factors have been initialized)
+   * - Zero suppression (according to parameter)
+   */
+  int FinishTimeframe(bool bApplyZeroSuppression = true,
+                      bool bApplyCommonModeEffect = false);
+
+
+  /**
    * Check overflow counter for the current TF
    */
   unsigned int GetSignalOverflowCount() const {return mSignalOverflowCount;}
