@@ -201,27 +201,57 @@ class ChannelMerger {
    */
   int InitAltroMapping(const char* filename);
 
+  enum NoiseManipulationMode {
+    /// no noise manipulation
+    kNoNoiseManip = 0,
+    /// replace intrinsic noise by simulated noise
+    kSimulateNoise,
+    /// replace intrinsic noise by simulated noise, and add sim noise to cluster signals
+    kSimulateNoiseAll,
+    /// add simulated noise to intrinsic noise
+    kAddNoise,
+    /// add simulated noise to intrinsic noise and cluster signals
+    kAddNoiseAll,
+    /// multiply noise by a factor and leave cluster signals unchanged
+    kMultiplyNoise
+  };
+
   /**
    * Manipulation of noise signals.
    *
-   * This method allows a simple scaling of noise signals by a factor.
-   * Requires zero suppression to be initialized properly, it is used
-   * to indicate noise signals and cluster signals. Noise signals are
-   * multiplied by the factor, an additional random offset with
-   * 0<= offset < factor is added.
-   * @param factor     scaling factor for noise signals
+   * The class supports manipulation of noise using different algorithms
+   * defined by the NoiseManipulationMode parameter. Requires zero suppression
+   * to be initialized properly in order to indicate noise and cluster signals.
+   * Manipulation of noise is done in FinishTimeframe according to the
+   * initialized parameters.
+   *
+   * @param level    level of the manipulation
+   * @param mode     manipulation algorithm
+   *
+   * Simulated noise can be used to manipulate either all timebins or only the
+   * ones which are flagged as noise by the zero suppression. For noise signals,
+   * simulated noise can be either added to the intrinsic noise of the used
+   * raw data, or the intrinsic noise can be replaced by simulated noise.
+   * For all other timebins (the cluster signals) simulated noise can only be
+   * added as there is no way to remove the intrinsic noise from the signal.
+   *
+   * In mode kMultiplyNoise, level is interpreted as factor. Noise signals are
+   * multiplied with the factor after adding a randomized offset 0 <= offset < 1
+   * to account for truncation in the digitized signal.
    */
-  void InitNoiseManipulation(unsigned factor) {mNoiseFactor = factor; }
+  void InitNoiseManipulation(float level, NoiseManipulationMode mode = kSimulateNoise, int seed = -1);
 
   /**
-   * Init simulation of noise as start sample in each new timeframe
+   * Init simulation of noise as baseline in each timeframe
    *
-   * When starting a new timeframe, random noise is generated according
-   * to the normal distribution with the specified parameters.
+   * This function is kept for backward compatibility and is forwarded
+   * now to noise manipulation algorithm kSimulateNoiseAll
    * @param width   noise width
    * @param seed    seed for random generator, generated from timestamp if -1
    */
-  void InitNoiseSimulation(float width, int seed = -1);
+  void InitNoiseSimulation(float width, int seed = -1) {
+    return InitNoiseManipulation(width, kSimulateNoiseAll, seed);
+  }
 
   void InitGainVariation(float gausMean, float gausSigma, int seed = 42);
 
@@ -502,7 +532,8 @@ class ChannelMerger {
   int mInputStreamMaxDDL;
   int mMinPadRow;
   int mMaxPadRow;
-  unsigned mNoiseFactor;
+  float mNoiseLevel;
+  NoiseManipulationMode mNoiseManipMode;
 
   TFolder* mChannelHistograms;
   TRandom3* mRnd;

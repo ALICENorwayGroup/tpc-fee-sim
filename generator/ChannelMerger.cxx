@@ -56,7 +56,8 @@ ChannelMerger::ChannelMerger()
   , mInputStreamMaxDDL(-1)
   , mMinPadRow(-1)
   , mMaxPadRow(-1)
-  , mNoiseFactor(0)
+  , mNoiseLevel(0)
+  , mNoiseManipMode(kNoNoiseManip)
   , mChannelHistograms(new TFolder("ChannelHistograms", "ChannelHistograms"))
   , mRnd(nullptr)
   , mNoiseGenerator(nullptr)
@@ -1072,20 +1073,31 @@ unsigned ChannelMerger::ManipulateNoise(unsigned signal) const
   // manipulate a noise signal by applying a factor and
   // add a randomized adc count in the range of the factor
   // this requires the pedestal to be subtracted.
-  unsigned factor = mNoiseFactor;
-  unsigned noisesignal=signal;
+  float factor = mNoiseLevel;
   if (factor <= 1) return signal;
+  const unsigned rndQuant = 100;
+  // random offset between 0 and 1 to account for the truncation
+  // of the ADC value
+  float offset = (std::rand() % rndQuant)/rndQuant;
+  float noisesignal = signal + offset;
   noisesignal *= factor;
-  noisesignal += std::rand() % factor;
   if (mBaselineshift<0 && noisesignal >= -mBaselineshift * (factor - 1))
     noisesignal -= -mBaselineshift * (factor - 1);
-  return noisesignal;
+
+  // finally return truncated signal
+  return (unsigned)noisesignal;
 }
 
-void ChannelMerger::InitNoiseSimulation(float width, int seed)
+void ChannelMerger::InitNoiseManipulation(float level, NoiseManipulationMode mode, int seed)
 {
+  mNoiseLevel = level;
+  mNoiseManipMode = mode;
+  if (mNoiseManipMode == kNoNoiseManip ||
+      mNoiseManipMode == kMultiplyNoise)
+    return;
+
   if (mNoiseGenerator) delete mNoiseGenerator;
-  mNoiseGenerator = new NoiseGenerator(0., width, seed);
+  mNoiseGenerator = new NoiseGenerator(0., level, seed);
 }
 
 void ChannelMerger::InitGainVariation(float gausMean, float gausSigma, int seed)
