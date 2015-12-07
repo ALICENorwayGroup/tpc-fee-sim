@@ -171,20 +171,14 @@ int ChannelMerger::GrowBuffer(unsigned newsize)
   // Parameter specifies new number of elements
   if (newsize <= mBufferSize) return 0;
 
-  buffer_t noiseBaseline = mBaselineshift<0?-mBaselineshift:0;
   buffer_t* lastData=mBuffer;
   mBuffer = new buffer_t[newsize];
   if (lastData) {
     memcpy(mBuffer, lastData, mBufferSize * sizeof(buffer_t));
     delete [] lastData;
   }
-  if (mNoiseGenerator) {
-    // initialize with noise
-    mNoiseGenerator->FillArray(mBuffer + mBufferSize, newsize - mBufferSize, noiseBaseline);
-  } else {
   // initialize to VOID_SIGNAL value to indicate timebins without signals
   memset(mBuffer+mBufferSize, 0xff, (newsize - mBufferSize) * sizeof(buffer_t));
-  }
 
   lastData=mUnderflowBuffer;
   mUnderflowBuffer = new buffer_t[newsize];
@@ -192,12 +186,7 @@ int ChannelMerger::GrowBuffer(unsigned newsize)
     memcpy(mUnderflowBuffer, lastData, mBufferSize * sizeof(buffer_t));
     delete [] lastData;
   }
-  if (mNoiseGenerator) {
-    // initialize with noise
-    mNoiseGenerator->FillArray(mUnderflowBuffer + mBufferSize, newsize - mBufferSize, noiseBaseline);
-  } else {
   memset(mUnderflowBuffer+mBufferSize, 0xff, (newsize - mBufferSize) * sizeof(buffer_t));
-  }
 
   mZSflags.resize(newsize, false);
 
@@ -236,14 +225,8 @@ int ChannelMerger::StartTimeframe()
   buffer_t* lastData=mBuffer;
   mBuffer=mUnderflowBuffer;
   mUnderflowBuffer=lastData;
-  if (mNoiseGenerator) {
-    // initialize with noise
-    buffer_t noiseBaseline = mBaselineshift<0?-mBaselineshift:0;
-    mNoiseGenerator->FillArray(mUnderflowBuffer, mBufferSize, noiseBaseline);
-  } else {
   // initialize to VOID_SIGNAL value to indicate timebins without signals
   if (mUnderflowBuffer) memset(mUnderflowBuffer, 0xff, mBufferSize * sizeof(buffer_t));
-  }
   mSignalOverflowCount=0;
 
   for (std::map<unsigned int, int>::iterator it=mChannelOccupancy.begin();
@@ -277,6 +260,48 @@ int ChannelMerger::FinishTimeframe(bool bApplyZeroSuppression,
   // apply the common mode effect simulation
   if (bApplyCommonModeEffect) {
     ApplyCommonModeEffect();
+  }
+
+  // manipulate noise
+  if (mNoiseManipMode == kMultiplyNoise) {
+    for (unsigned i = 0; i < mBufferSize; i++) {
+      if (!mZSflags[i]) continue;
+      mBuffer[i] = ManipulateNoise(mBuffer[i]);
+    }
+  } else if (mNoiseGenerator) {
+    buffer_t noiseBaseline = mBaselineshift<0?-mBaselineshift:0;
+
+    typedef float (*Operation)(buffer_t signal, float noise);
+    Operation noiseAdd = [] (buffer_t signal, float noise) -> float { return signal + noise; };
+    Operation noiseSet = [] (buffer_t, float noise) -> float { return noise; };
+    Operation noiseOperation = noiseSet;
+    if (mNoiseManipMode == kAddNoise || mNoiseManipMode == kAddNoiseAll) {
+      // use add instead of set
+      noiseOperation = noiseAdd;
+      // there is no additional offset when adding noise
+      noiseBaseline = 0;
+    }
+
+    if (mNoiseManipMode == kAddNoiseAll) {
+      // manipulate all by using a true-selector
+      mNoiseGenerator->FillArray(mBuffer, mBufferSize, noiseBaseline,
+                                 [] (unsigned i) {return true;},
+                                 noiseAdd);
+    } else if (mNoiseManipMode == kSimulateNoiseAll) {
+      // manipulate all below threshold be setting simulated noise
+      // and all others by adding
+      mNoiseGenerator->FillArray(mBuffer, mBufferSize, noiseBaseline,
+                                 [&] (unsigned i) {return mZSflags[i];},
+                                 noiseSet);
+      mNoiseGenerator->FillArray(mBuffer, mBufferSize, (buffer_t)0,
+                                 [&] (unsigned i) {return !mZSflags[i];},
+                                 noiseAdd);
+    } else {
+      // manipulate signals below ZS threshold by using the flags as selector
+      mNoiseGenerator->FillArray(mBuffer, mBufferSize, noiseBaseline,
+                                 [&] (unsigned i) {return mZSflags[i];},
+                                 noiseOperation);
+    }
   }
 
   // apply the gain variations
