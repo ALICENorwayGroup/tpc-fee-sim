@@ -31,12 +31,12 @@ class NoiseGenerator {
   NoiseGenerator(float mean = 0., float sigma = 1., int seed = -1);
   ~NoiseGenerator();
 
-  template<typename T, typename Selector>
-  int FillArray(T* buffer, unsigned size, T offset, Selector selector);
+  template<typename T, typename Selector, typename Operation>
+  int FillArray(T* buffer, unsigned size, T offset, Selector selector, Operation operation);
 
   template<typename T>
   int FillArray(T* buffer, unsigned size, T offset){
-    return FillArray(buffer, size, offset, [] (unsigned) {return true;});
+    return FillArray(buffer, size, offset, [] (unsigned) {return true;}, [] (T, float noise) {return noise;});
   }
 
  private:
@@ -48,19 +48,19 @@ class NoiseGenerator {
   std::normal_distribution<float> mDistribution;
 };
 
-template<typename T, typename Selector>
-int NoiseGenerator::FillArray(T* buffer, unsigned size, T offset, Selector selector)
+template<typename T, typename Selector, typename Operation>
+int NoiseGenerator::FillArray(T* buffer, unsigned size, T offset, Selector selector, Operation noiseOperation)
 {
   if (!buffer) return -1;
   for (unsigned i = 0; i < size; i++) {
-    if (!selector(i)) continue;
     float value = mDistribution(mGenerator);
+    if (!selector(i)) continue;
     value += offset;
+    value = noiseOperation(buffer[i], value);
     if (value < 0.) value = 0.;
     buffer[i] = (T)round(value);
   }
 
   return 0;
 }
-
 #endif
