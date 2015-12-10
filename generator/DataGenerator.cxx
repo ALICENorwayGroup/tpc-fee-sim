@@ -25,8 +25,9 @@
 #include <functional>
 
 namespace TPC {
-DataGenerator::DataGenerator(int overlayMode)
+DataGenerator::DataGenerator(int overlayMode, int commonSeed)
   : mOverlayMode(overlayMode)
+  , mCommonSeed(commonSeed)
   , mRate(5.)
   , mInputConfig()
   , mMappingFileName()
@@ -83,7 +84,7 @@ int DataGenerator::Init(float rate, const char* inputconfig)
 
   mRate = rate;
   if (mOverlayMode != kFixedNumberNoOffset) {
-    mGenerator = new GeneratorTF(rate);
+    mGenerator = new GeneratorTF(rate, mCommonSeed);
   }
 
   mChannelMerger = new ChannelMerger;
@@ -101,7 +102,7 @@ int DataGenerator::Init(float rate, const char* inputconfig)
   if (mGainVariationGausMean > 0)
     mChannelMerger->InitGainVariation(mGainVariationGausMean, mGainVariationGausSigma);
   if (mNoiseMode > 0 && mNoiseLevel > 0.)
-    mChannelMerger->InitNoiseManipulation(mNoiseLevel, (ChannelMerger::NoiseManipulationMode)mNoiseMode, 42);
+    mChannelMerger->InitNoiseManipulation(mNoiseLevel, (ChannelMerger::NoiseManipulationMode)mNoiseMode, mCommonSeed);
 
   mNofSimulatedFrames = 0;
   return 0;

@@ -56,7 +56,7 @@ namespace TPC {
    */
   class DataGenerator {
   public:
-    DataGenerator(int overlayMode = 0);
+    DataGenerator(int overlayMode = 0, int commonSeed = -1);
 
     ~DataGenerator();
 
@@ -217,6 +217,8 @@ namespace TPC {
 
     /// overlay mode
     int mOverlayMode;
+    /// common seed for random generators
+    int mCommonSeed;
     /// avrg rate with respect to unit time, i.e. framesize
     /// number of collisions per frame for pileup mode 0 and 2
     float mRate;
