@@ -91,9 +91,9 @@ class ChannelMerger {
    *
    * Applying configured effects in the following sequence
    * - Occupancy calculation (always)
+   * - Gain Variation to signal regions (if gain variation factors have been initialized)
    * - Common Mode Effect (according to parameter)
    * - Noise simulation (according to initialized mode)
-   * - Gain Variation (if gain variation factors have been initialized)
    * - Zero suppression (according to parameter)
    */
   int FinishTimeframe(bool bApplyZeroSuppression = true,

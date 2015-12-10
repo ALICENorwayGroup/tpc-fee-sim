@@ -257,6 +257,10 @@ int ChannelMerger::FinishTimeframe(bool bApplyZeroSuppression,
     (mChannelGainVariation.size() > 0);
   CalculateZeroSuppression(bApplyZeroSuppression && !bPostponeZSApplication);
 
+  // apply the gain variations
+  if (mChannelGainVariation.size() > 0)
+    ApplyGainVariation();
+
   // apply the common mode effect simulation
   if (bApplyCommonModeEffect) {
     ApplyCommonModeEffect();
@@ -303,10 +307,6 @@ int ChannelMerger::FinishTimeframe(bool bApplyZeroSuppression,
                                  noiseOperation);
     }
   }
-
-  // apply the gain variations
-  if (mChannelGainVariation.size() > 0)
-    ApplyGainVariation();
 
   if (bApplyZeroSuppression && bPostponeZSApplication) {
     // zero suppression has been delayed until now, apply to the buffer
@@ -1136,9 +1136,8 @@ void ChannelMerger::InitGainVariation(float gausMean, float gausSigma, int seed)
     for (int i = 0; i < 800000; i++) mRnd->Rndm();
   }
 
-  for (std::map<unsigned int, unsigned int>::const_iterator chit=mChannelBaseline.begin();
-       chit!=mChannelBaseline.end(); chit++) {
-    unsigned index=chit->first;
+  for (const auto chit : mChannelPositions) {
+    unsigned index=chit.first;
     mChannelGainVariation[index] = mRnd->Gaus(gausMean,gausSigma);
   }
 }
@@ -1149,16 +1148,18 @@ void ChannelMerger::ApplyGainVariation()
     std::cerr << "ApplyGainVariation error: random generator not initialized" << std::endl;
     return;
   }
-  for (std::map<unsigned int, unsigned int>::const_iterator chit=mChannelPositions.begin();
-       chit!=mChannelPositions.end(); chit++) {
-    unsigned index = chit->first;
-    unsigned position=chit->second;
+  for (const auto chit : mChannelPositions) {
+    unsigned index = chit.first;
+    unsigned position=chit.second;
     position*=mChannelLenght;
     buffer_t* signalBuffer=mBuffer+position;
     float factor = mChannelGainVariation[index];
 
     for (int i=mChannelLenght-1; i>=0; i--) {
       unsigned currentSignal=signalBuffer[i];
+      // Assumption: gain variation applies to the cluster signal and has its
+      // origin in the readout chamber (not the electronics)
+      if (mZSflags[position + i]) continue;
       if (currentSignal == VOID_SIGNAL) continue;
 
       // since the signal was truncated before (stored as integer), it could be
