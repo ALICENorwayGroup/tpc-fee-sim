@@ -205,7 +205,7 @@ namespace TPC {
     /**
      * Set noise level for the generated timeframe
      */
-    void SetNoiseLevel(float noiselevel) {mNoiseLevel = noiselevel;}
+    void SetNoiseLevel(float noiselevel, int mode) {mNoiseLevel = noiselevel; mNoiseMode = mode;}
 
   protected:
 
@@ -248,6 +248,7 @@ namespace TPC {
     float mGainVariationGausSigma;
     float mGainVariationGausMean;
     float mNoiseLevel;
+    int   mNoiseMode;
 
     std::string mAsciiTargetDir;
     std::string mAsciiPrefix;
