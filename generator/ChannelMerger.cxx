@@ -334,16 +334,17 @@ int ChannelMerger::AddChannel(float offset, unsigned int index, AliAltroRawStrea
     //std::cout << "using channel with index " << std::hex << std::setw(8) << index << " at position " << std::dec << position << std::endl;
   }
 
-  unsigned int baseline=0;
+  int baseline=0;
   if (mChannelBaseline.find(index) != mChannelBaseline.end()) {
     baseline = mChannelBaseline[index];
   }
 
-  unsigned int threshold=GetThreshold();
+  int threshold=GetThreshold();
   if (threshold != VOID_SIGNAL) {
     // adjust threshold to baseline
     threshold+=baseline;
   }
+  assert(threshold>=0);
 
   unsigned reqsize=position + 1; // need space for one channel starting at position
   reqsize *= mChannelLenght * sizeof(buffer_t);
@@ -400,15 +401,18 @@ int ChannelMerger::AddChannel(float offset, unsigned int index, AliAltroRawStrea
 
       // subtract baseline from the actual raw signal
       // baseline is pedestal lowered by the configured baselineshift
-      if (originalSignal<baseline) originalSignal=0;
+      if (baseline<0) originalSignal+=-baseline;
+      else if (originalSignal<(unsigned)baseline) originalSignal=0;
       else originalSignal-=baseline;
 
       // remove baseline and baselineshift from the signal
       // Note the sign of baselineshift, see comment in GetThreshold
-      unsigned tb=baseline;
-      if (mBaselineshift<0) tb+=-mBaselineshift;
-      else if ((unsigned)mBaselineshift<tb) tb-=mBaselineshift;
-      if (currentSignal<tb) currentSignal=0;
+      int tb=baseline-mBaselineshift;
+      // the baseline for each channel has been set to the configured
+      // pedestal value plus baselineshift, the above operation reverts
+      // this so that tb can not be negative
+      assert(tb>=0);
+      if (currentSignal<(unsigned)tb) currentSignal=0;
       else currentSignal-=tb;
 
       int timebin=startTime-i;
@@ -715,7 +719,6 @@ int ChannelMerger::InitChannelBaseline(const char* filename, int baselineshift)
     input >> AvrgSignal;
     if (input.good()) {
       AvrgSignal+=baselineshift;
-      if (AvrgSignal<0) AvrgSignal=0;
       unsigned index=DDLNumber<<16 | HWAddr;
       mChannelBaseline[index]=AvrgSignal;
     }

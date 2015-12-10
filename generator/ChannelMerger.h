@@ -514,7 +514,7 @@ class ChannelMerger {
   /// array of ZS flags, true if signal in timebin is going to suppressed
   std::vector<bool> mZSflags;
   std::map<unsigned int, unsigned int> mChannelPositions;
-  std::map<unsigned int, unsigned int> mChannelBaseline;
+  std::map<unsigned int, int> mChannelBaseline;
   std::map<unsigned int, float> mChannelGainVariation;
   std::map<unsigned int, unsigned int> mChannelMappingPadrow;
   std::map<unsigned int, unsigned int> mChannelMappingPad;
